@@ -1,9 +1,9 @@
 // ============================================================
 // STOCK TRACKER — server.js
-// Phase 1b: real prices.
-// New concepts: calling an EXTERNAL api (Finnhub), reading a
-// secret from process.env, async/await with real network calls,
-// Promise.all for parallel requests, and graceful per-item errors.
+// Phase 1c: search by company name.
+// New concept: a SEARCH route that proxies Finnhub's symbol
+// lookup, so the frontend never talks to Finnhub directly
+// (keeps our API key server-side, where it belongs).
 // ============================================================
 
 const express = require('express');
@@ -13,13 +13,10 @@ const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ------------------------------------------------------------
-// STORAGE (still temporary — same limitation as Phase 1a)
-// ------------------------------------------------------------
 let watchlist = ['AAPL', 'NVDA'];
 
 // ------------------------------------------------------------
-// WATCHLIST ROUTES (unchanged from Phase 1a)
+// WATCHLIST ROUTES (unchanged)
 // ------------------------------------------------------------
 app.get('/api/watchlist', (req, res) => {
   res.json({ tickers: watchlist });
@@ -46,71 +43,84 @@ app.delete('/api/watchlist/:ticker', (req, res) => {
 });
 
 // ------------------------------------------------------------
-// PRICES — the new part.
+// PRICES (unchanged from Phase 1b)
 // ------------------------------------------------------------
-
 const FINNHUB_QUOTE_URL = 'https://finnhub.io/api/v1/quote';
 
-// Fetch ONE ticker's current quote from Finnhub.
-// We control the exact shape of what this returns, no matter
-// what Finnhub sends back — that way the rest of our app never
-// has to know or care about Finnhub's specific field names.
 async function fetchQuote(ticker) {
   try {
     const url = `${FINNHUB_QUOTE_URL}?symbol=${ticker}&token=${process.env.FINNHUB_API_KEY}`;
-    const response = await fetch(url);      // built into Node — no library needed
+    const response = await fetch(url);
     const data = await response.json();
 
-    // Finnhub returns c (current price) = 0 for tickers it can't find.
-    // Treat that as "no data" rather than showing a fake $0.00.
     if (!data || data.c === 0) {
       return { ticker, error: 'No data found' };
     }
 
     return {
       ticker,
-      price: data.c,            // current price
-      change: data.d,           // dollar change today
-      changePercent: data.dp,   // percent change today
+      price: data.c,
+      change: data.d,
+      changePercent: data.dp,
     };
   } catch (err) {
-    // Network hiccup, bad key, Finnhub down, etc.
-    // One failed ticker should never break the other nine.
     return { ticker, error: 'Failed to fetch' };
   }
 }
 
-// ------------------------------------------------------------
-// ROUTE: GET /api/prices
-// Fetches a live quote for EVERY ticker on the watchlist at once.
-//
-// Promise.all runs all the requests IN PARALLEL. Without it, we'd
-// fetch AAPL, wait for it to finish, then fetch NVDA, wait, etc —
-// five tickers would take 5x as long as one. With Promise.all,
-// they all fire at the same time and we wait for the slowest one.
-// ------------------------------------------------------------
 app.get('/api/prices', async (req, res) => {
   if (!process.env.FINNHUB_API_KEY) {
-    // This is what protects us: if the Railway variable is ever
-    // missing or mistyped, we get a clear error instead of a
-    // confusing silent failure.
     return res.status(500).json({ error: 'Server is missing FINNHUB_API_KEY' });
   }
 
-  const quotes = await Promise.all(
-    watchlist.map(ticker => fetchQuote(ticker))
-  );
-
+  const quotes = await Promise.all(watchlist.map(ticker => fetchQuote(ticker)));
   res.json({ quotes });
 });
 
-// Health check — still here, still useful.
+// ------------------------------------------------------------
+// SEARCH — the new part.
+// ROUTE: GET /api/search?q=amazon
+// Looks up company names / tickers via Finnhub's search endpoint
+// and hands back a short, clean list: [{ symbol, name }, ...]
+// ------------------------------------------------------------
+const FINNHUB_SEARCH_URL = 'https://finnhub.io/api/v1/search';
+
+app.get('/api/search', async (req, res) => {
+  const query = (req.query.q || '').trim();
+
+  if (!query) {
+    return res.json({ results: [] });   // empty box = empty results, no error
+  }
+  if (!process.env.FINNHUB_API_KEY) {
+    return res.status(500).json({ error: 'Server is missing FINNHUB_API_KEY' });
+  }
+
+  try {
+    const url = `${FINNHUB_SEARCH_URL}?q=${encodeURIComponent(query)}&token=${process.env.FINNHUB_API_KEY}`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    // Finnhub returns lots of noise (foreign listings, odd symbol
+    // formats). Keep it simple: plain tickers (no dots), max 6
+    // characters, top 6 matches. Not perfect, but clean for common
+    // stocks — which covers the vast majority of real searches.
+    const results = (data.result || [])
+      .filter(r => r.symbol && !r.symbol.includes('.') && r.symbol.length <= 6 && r.description)
+      .slice(0, 6)
+      .map(r => ({ symbol: r.symbol, name: r.description }));
+
+    res.json({ results });
+  } catch (err) {
+    res.status(500).json({ error: 'Search failed' });
+  }
+});
+
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'alive',
     time: new Date().toISOString(),
     message: 'Stock tracker server is running',
-    hasApiKey: Boolean(process.env.FINNHUB_API_KEY)   // handy for debugging
+    hasApiKey: Boolean(process.env.FINNHUB_API_KEY)
   });
 });
 
