@@ -13,64 +13,163 @@
       color: #E8ECF2;
       font-family: 'Segoe UI', system-ui, sans-serif;
       display: flex;
-      align-items: center;
       justify-content: center;
+      padding: 40px 20px;
     }
 
-    .card {
+    .app { width: 100%; max-width: 560px; }
+
+    h1 { font-size: 22px; letter-spacing: 0.03em; }
+    .sub { color: #8A96AC; font-size: 13px; margin: 4px 0 24px; }
+
+    /* --- add-ticker form --- */
+    .add-row { display: flex; gap: 10px; margin-bottom: 10px; }
+
+    input {
+      flex: 1;
+      background: #171F2E;
+      border: 1px solid #26314A;
+      border-radius: 8px;
+      padding: 12px 14px;
+      color: #E8ECF2;
+      font-size: 15px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      outline: none;
+    }
+    input:focus { border-color: #3D6FA8; }
+
+    .btn-add {
+      background: #2E6E4E;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 22px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-add:hover { background: #255C41; }
+
+    .msg { min-height: 20px; font-size: 13px; margin-bottom: 14px; }
+    .msg.error { color: #F87171; }
+
+    /* --- watchlist table --- */
+    .list {
       background: #171F2E;
       border: 1px solid #26314A;
       border-radius: 12px;
-      padding: 36px 44px;
-      text-align: center;
-      max-width: 420px;
+      overflow: hidden;
     }
 
-    h1 {
-      font-size: 22px;
-      letter-spacing: 0.03em;
-      margin-bottom: 6px;
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid #26314A;
     }
+    .row:last-child { border-bottom: none; }
 
-    .sub { color: #8A96AC; font-size: 13px; margin-bottom: 24px; }
+    .ticker { font-size: 16px; font-weight: 600; letter-spacing: 0.06em; }
 
-    .status {
-      font-family: monospace;
-      font-size: 14px;
-      padding: 12px;
-      border-radius: 8px;
-      background: #0E1420;
-      border: 1px solid #26314A;
+    .btn-remove {
+      background: none;
+      border: 1px solid #58222A;
+      color: #F87171;
+      border-radius: 6px;
+      padding: 5px 12px;
+      font-size: 12px;
+      cursor: pointer;
     }
+    .btn-remove:hover { background: #2A1518; }
 
-    .status.ok { color: #4ADE80; border-color: #1E4428; }
-    .status.bad { color: #F87171; border-color: #582222; }
+    .empty { padding: 24px; text-align: center; color: #8A96AC; font-size: 14px; }
   </style>
 </head>
 <body>
-  <div class="card">
+  <div class="app">
     <h1>STOCK TRACKER</h1>
-    <div class="sub">Phase 0 — skeleton</div>
-    <div class="status" id="status">Checking server...</div>
+    <div class="sub">Phase 1a — watchlist</div>
+
+    <div class="add-row">
+      <input id="tickerInput" placeholder="Add ticker (e.g. MSFT)" maxlength="8" />
+      <button class="btn-add" id="addBtn">Add</button>
+    </div>
+    <div class="msg" id="msg"></div>
+
+    <div class="list" id="list"></div>
   </div>
 
   <script>
-    // The frontend's first conversation with its own backend:
-    // ask /api/health if the server is alive, show the answer.
-    async function checkHealth() {
-      const statusEl = document.getElementById('status');
-      try {
-        const response = await fetch('/api/health');   // call our API
-        const data = await response.json();            // parse the JSON reply
-        statusEl.textContent = '✓ ' + data.message;
-        statusEl.className = 'status ok';
-      } catch (err) {
-        statusEl.textContent = '✗ Cannot reach the server';
-        statusEl.className = 'status bad';
+    const input = document.getElementById('tickerInput');
+    const addBtn = document.getElementById('addBtn');
+    const msgEl = document.getElementById('msg');
+    const listEl = document.getElementById('list');
+
+    // ---- RENDER: turn an array of tickers into rows on screen ----
+    function render(tickers) {
+      if (tickers.length === 0) {
+        listEl.innerHTML = '<div class="empty">Watchlist is empty — add a ticker above</div>';
+        return;
       }
+      listEl.innerHTML = tickers.map(t => `
+        <div class="row">
+          <span class="ticker">${t}</span>
+          <button class="btn-remove" data-ticker="${t}">Remove</button>
+        </div>
+      `).join('');
     }
 
-    checkHealth();
+    // ---- LOAD: GET the list from the server ----
+    async function loadWatchlist() {
+      const res = await fetch('/api/watchlist');
+      const data = await res.json();
+      render(data.tickers);
+    }
+
+    // ---- ADD: POST a new ticker to the server ----
+    async function addTicker() {
+      const ticker = input.value.trim();
+      if (!ticker) return;
+
+      const res = await fetch('/api/watchlist', {
+        method: 'POST',                                   // sending, not asking
+        headers: { 'Content-Type': 'application/json' },  // "the body is JSON"
+        body: JSON.stringify({ ticker })                  // the actual data
+      });
+      const data = await res.json();
+
+      if (!res.ok) {                     // server said 400 or 409
+        msgEl.textContent = data.error;
+        msgEl.className = 'msg error';
+        return;
+      }
+
+      msgEl.textContent = '';
+      input.value = '';
+      render(data.tickers);
+    }
+
+    // ---- REMOVE: DELETE a ticker ----
+    async function removeTicker(ticker) {
+      const res = await fetch('/api/watchlist/' + ticker, { method: 'DELETE' });
+      const data = await res.json();
+      render(data.tickers);
+    }
+
+    // ---- wire up the events ----
+    addBtn.addEventListener('click', addTicker);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') addTicker(); });
+
+    // One listener on the whole list handles every Remove button,
+    // even ones created later. (Called "event delegation".)
+    listEl.addEventListener('click', e => {
+      const btn = e.target.closest('.btn-remove');
+      if (btn) removeTicker(btn.dataset.ticker);
+    });
+
+    loadWatchlist();   // fetch the list the moment the page opens
   </script>
 </body>
 </html>
