@@ -17,12 +17,23 @@
       padding: 40px 20px;
     }
 
-    .app { width: 100%; max-width: 560px; }
+    .app { width: 100%; max-width: 600px; }
 
+    .top-row { display: flex; justify-content: space-between; align-items: baseline; }
     h1 { font-size: 22px; letter-spacing: 0.03em; }
     .sub { color: #8A96AC; font-size: 13px; margin: 4px 0 24px; }
 
-    /* --- add-ticker form --- */
+    .refresh-btn {
+      background: none;
+      border: 1px solid #26314A;
+      color: #8A96AC;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .refresh-btn:hover { background: #171F2E; color: #E8ECF2; }
+
     .add-row { display: flex; gap: 10px; margin-bottom: 10px; }
 
     input {
@@ -54,7 +65,6 @@
     .msg { min-height: 20px; font-size: 13px; margin-bottom: 14px; }
     .msg.error { color: #F87171; }
 
-    /* --- watchlist table --- */
     .list {
       background: #171F2E;
       border: 1px solid #26314A;
@@ -71,7 +81,23 @@
     }
     .row:last-child { border-bottom: none; }
 
+    .left { display: flex; align-items: baseline; gap: 12px; }
     .ticker { font-size: 16px; font-weight: 600; letter-spacing: 0.06em; }
+
+    .price { font-size: 15px; font-variant-numeric: tabular-nums; color: #8A96AC; }
+    .price.loaded { color: #E8ECF2; }
+
+    .change {
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      padding: 2px 8px;
+      border-radius: 5px;
+    }
+    .change.up { color: #4ADE80; background: #12281C; }
+    .change.down { color: #F87171; background: #2A1518; }
+    .change.flat { color: #8A96AC; background: #1B2432; }
+
+    .right { display: flex; align-items: center; gap: 14px; }
 
     .btn-remove {
       background: none;
@@ -85,18 +111,25 @@
     .btn-remove:hover { background: #2A1518; }
 
     .empty { padding: 24px; text-align: center; color: #8A96AC; font-size: 14px; }
+    .server-error { color: #F87171; font-size: 13px; margin-bottom: 14px; }
   </style>
 </head>
 <body>
   <div class="app">
-    <h1>STOCK TRACKER</h1>
-    <div class="sub">Phase 1a — watchlist</div>
+    <div class="top-row">
+      <div>
+        <h1>STOCK TRACKER</h1>
+        <div class="sub">Phase 1b — live prices</div>
+      </div>
+      <button class="refresh-btn" id="refreshBtn">↻ Refresh</button>
+    </div>
 
     <div class="add-row">
       <input id="tickerInput" placeholder="Add ticker (e.g. MSFT)" maxlength="8" />
       <button class="btn-add" id="addBtn">Add</button>
     </div>
     <div class="msg" id="msg"></div>
+    <div class="server-error" id="serverError"></div>
 
     <div class="list" id="list"></div>
   </div>
@@ -104,43 +137,97 @@
   <script>
     const input = document.getElementById('tickerInput');
     const addBtn = document.getElementById('addBtn');
+    const refreshBtn = document.getElementById('refreshBtn');
     const msgEl = document.getElementById('msg');
+    const serverErrorEl = document.getElementById('serverError');
     const listEl = document.getElementById('list');
 
-    // ---- RENDER: turn an array of tickers into rows on screen ----
-    function render(tickers) {
+    let tickers = [];          // just the symbols, from /api/watchlist
+    let quotesByTicker = {};   // ticker -> price data, from /api/prices
+
+    // ---- RENDER: draw the list using whatever data we currently have ----
+    // Called once right after loading tickers (prices not in yet — shows "...")
+    // and again after prices arrive (fills the numbers in).
+    function render() {
       if (tickers.length === 0) {
         listEl.innerHTML = '<div class="empty">Watchlist is empty — add a ticker above</div>';
         return;
       }
-      listEl.innerHTML = tickers.map(t => `
-        <div class="row">
-          <span class="ticker">${t}</span>
-          <button class="btn-remove" data-ticker="${t}">Remove</button>
-        </div>
-      `).join('');
+
+      listEl.innerHTML = tickers.map(t => {
+        const q = quotesByTicker[t];
+
+        let priceHtml = '<span class="price">loading…</span>';
+        let changeHtml = '';
+
+        if (q && q.error) {
+          priceHtml = `<span class="price">${q.error}</span>`;
+        } else if (q) {
+          priceHtml = `<span class="price loaded">$${q.price.toFixed(2)}</span>`;
+          const dir = q.changePercent > 0 ? 'up' : q.changePercent < 0 ? 'down' : 'flat';
+          const sign = q.changePercent > 0 ? '+' : '';
+          changeHtml = `<span class="change ${dir}">${sign}${q.changePercent.toFixed(2)}%</span>`;
+        }
+
+        return `
+          <div class="row">
+            <div class="left">
+              <span class="ticker">${t}</span>
+              ${priceHtml}
+              ${changeHtml}
+            </div>
+            <div class="right">
+              <button class="btn-remove" data-ticker="${t}">Remove</button>
+            </div>
+          </div>
+        `;
+      }).join('');
     }
 
-    // ---- LOAD: GET the list from the server ----
+    // ---- LOAD TICKERS: GET /api/watchlist ----
     async function loadWatchlist() {
       const res = await fetch('/api/watchlist');
       const data = await res.json();
-      render(data.tickers);
+      tickers = data.tickers;
+      render();          // show tickers immediately, prices say "loading…"
+      loadPrices();      // then go fetch the actual numbers
     }
 
-    // ---- ADD: POST a new ticker to the server ----
+    // ---- LOAD PRICES: GET /api/prices ----
+    async function loadPrices() {
+      serverErrorEl.textContent = '';
+      try {
+        const res = await fetch('/api/prices');
+        const data = await res.json();
+
+        if (!res.ok) {
+          serverErrorEl.textContent = data.error || 'Could not load prices';
+          return;
+        }
+
+        // Turn the array [{ticker, price, ...}, ...] into a lookup object
+        // { AAPL: {...}, NVDA: {...} } so render() can find each one fast.
+        quotesByTicker = {};
+        data.quotes.forEach(q => { quotesByTicker[q.ticker] = q; });
+        render();
+      } catch (err) {
+        serverErrorEl.textContent = 'Could not reach the server';
+      }
+    }
+
+    // ---- ADD ----
     async function addTicker() {
       const ticker = input.value.trim();
       if (!ticker) return;
 
       const res = await fetch('/api/watchlist', {
-        method: 'POST',                                   // sending, not asking
-        headers: { 'Content-Type': 'application/json' },  // "the body is JSON"
-        body: JSON.stringify({ ticker })                  // the actual data
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticker })
       });
       const data = await res.json();
 
-      if (!res.ok) {                     // server said 400 or 409
+      if (!res.ok) {
         msgEl.textContent = data.error;
         msgEl.className = 'msg error';
         return;
@@ -148,28 +235,34 @@
 
       msgEl.textContent = '';
       input.value = '';
-      render(data.tickers);
+      tickers = data.tickers;
+      render();
+      loadPrices();   // fetch a price for the ticker we just added
     }
 
-    // ---- REMOVE: DELETE a ticker ----
+    // ---- REMOVE ----
     async function removeTicker(ticker) {
       const res = await fetch('/api/watchlist/' + ticker, { method: 'DELETE' });
       const data = await res.json();
-      render(data.tickers);
+      tickers = data.tickers;
+      delete quotesByTicker[ticker];
+      render();
     }
 
-    // ---- wire up the events ----
     addBtn.addEventListener('click', addTicker);
     input.addEventListener('keydown', e => { if (e.key === 'Enter') addTicker(); });
+    refreshBtn.addEventListener('click', loadPrices);
 
-    // One listener on the whole list handles every Remove button,
-    // even ones created later. (Called "event delegation".)
     listEl.addEventListener('click', e => {
       const btn = e.target.closest('.btn-remove');
       if (btn) removeTicker(btn.dataset.ticker);
     });
 
-    loadWatchlist();   // fetch the list the moment the page opens
+    loadWatchlist();
+
+    // Auto-refresh prices every 30 seconds. Not too often — we want to
+    // stay comfortably inside Finnhub's free-tier rate limit.
+    setInterval(loadPrices, 30000);
   </script>
 </body>
 </html>
