@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Tracker</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      background: #0E1420;
+      color: #E8ECF2;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card {
+      background: #171F2E;
+      border: 1px solid #26314A;
+      border-radius: 12px;
+      padding: 36px 44px;
+      text-align: center;
+      max-width: 420px;
+    }
+
+    h1 {
+      font-size: 22px;
+      letter-spacing: 0.03em;
+      margin-bottom: 6px;
+    }
+
+    .sub { color: #8A96AC; font-size: 13px; margin-bottom: 24px; }
+
+    .status {
+      font-family: monospace;
+      font-size: 14px;
+      padding: 12px;
+      border-radius: 8px;
+      background: #0E1420;
+      border: 1px solid #26314A;
+    }
+
+    .status.ok { color: #4ADE80; border-color: #1E4428; }
+    .status.bad { color: #F87171; border-color: #582222; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>STOCK TRACKER</h1>
+    <div class="sub">Phase 0 — skeleton</div>
+    <div class="status" id="status">Checking server...</div>
+  </div>
+
+  <script>
+    // The frontend's first conversation with its own backend:
+    // ask /api/health if the server is alive, show the answer.
+    async function checkHealth() {
+      const statusEl = document.getElementById('status');
+      try {
+        const response = await fetch('/api/health');   // call our API
+        const data = await response.json();            // parse the JSON reply
+        statusEl.textContent = '✓ ' + data.message;
+        statusEl.className = 'status ok';
+      } catch (err) {
+        statusEl.textContent = '✗ Cannot reach the server';
+        statusEl.className = 'status bad';
+      }
+    }
+
+    checkHealth();
+  </script>
+</body>
+</html>

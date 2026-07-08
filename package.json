@@ -1,0 +1,12 @@
+{
+  "name": "stock-tracker",
+  "version": "0.1.0",
+  "description": "Watchlist, charts, and alerts for stock movements",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
