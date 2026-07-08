@@ -1,8 +1,9 @@
 // ============================================================
 // STOCK TRACKER — server.js
-// Phase 1a: the watchlist.
-// New concepts: POST routes (receiving data), DELETE routes,
-// URL parameters, input validation, and in-memory storage.
+// Phase 1b: real prices.
+// New concepts: calling an EXTERNAL api (Finnhub), reading a
+// secret from process.env, async/await with real network calls,
+// Promise.all for parallel requests, and graceful per-item errors.
 // ============================================================
 
 const express = require('express');
@@ -13,74 +14,103 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ------------------------------------------------------------
-// STORAGE (temporary version)
-// A plain array living in the server's memory.
-// IMPORTANT LIMITATION we accept for now: when Railway restarts
-// the server (redeploys, maintenance), this array resets.
-// A real database fixes that — it's a later step, on purpose.
+// STORAGE (still temporary — same limitation as Phase 1a)
 // ------------------------------------------------------------
-let watchlist = ['AAPL', 'NVDA'];   // start with two so the page isn't empty
+let watchlist = ['AAPL', 'NVDA'];
 
 // ------------------------------------------------------------
-// ROUTE 1: GET /api/watchlist
-// "Give me the current list."
+// WATCHLIST ROUTES (unchanged from Phase 1a)
 // ------------------------------------------------------------
 app.get('/api/watchlist', (req, res) => {
   res.json({ tickers: watchlist });
 });
 
-// ------------------------------------------------------------
-// ROUTE 2: POST /api/watchlist
-// "Here's a new ticker, add it."
-// POST = the browser is SENDING data. The data arrives in
-// req.body (unpacked for us by express.json()).
-// ------------------------------------------------------------
 app.post('/api/watchlist', (req, res) => {
-  // 1. Pull the ticker out of the request body.
-  //    "|| ''" means: if it's missing, use an empty string
-  //    instead of crashing.
   const raw = (req.body.ticker || '').trim().toUpperCase();
 
-  // 2. VALIDATE. Never trust incoming data — rule #1 of backends.
-  //    This regex allows 1-6 letters (with an optional dot,
-  //    for tickers like BRK.B). Anything else is rejected.
   if (!/^[A-Z]{1,6}(\.[A-Z])?$/.test(raw)) {
     return res.status(400).json({ error: 'Invalid ticker symbol' });
   }
-
-  // 3. No duplicates.
   if (watchlist.includes(raw)) {
     return res.status(409).json({ error: raw + ' is already on the list' });
   }
 
-  // 4. All checks passed — save it and confirm.
   watchlist.push(raw);
   res.json({ tickers: watchlist });
 });
 
-// ------------------------------------------------------------
-// ROUTE 3: DELETE /api/watchlist/:ticker
-// "Remove this one."
-// The :ticker part is a URL PARAMETER — a blank that the
-// requester fills in. DELETE /api/watchlist/NVDA makes
-// req.params.ticker equal "NVDA".
-// ------------------------------------------------------------
 app.delete('/api/watchlist/:ticker', (req, res) => {
   const target = req.params.ticker.toUpperCase();
-
-  // .filter() builds a new array keeping only items that pass
-  // the test — i.e. everything EXCEPT the target.
   watchlist = watchlist.filter(t => t !== target);
-
   res.json({ tickers: watchlist });
 });
 
-// Health check from Phase 0 — keeping it, it's useful forever.
+// ------------------------------------------------------------
+// PRICES — the new part.
+// ------------------------------------------------------------
+
+const FINNHUB_QUOTE_URL = 'https://finnhub.io/api/v1/quote';
+
+// Fetch ONE ticker's current quote from Finnhub.
+// We control the exact shape of what this returns, no matter
+// what Finnhub sends back — that way the rest of our app never
+// has to know or care about Finnhub's specific field names.
+async function fetchQuote(ticker) {
+  try {
+    const url = `${FINNHUB_QUOTE_URL}?symbol=${ticker}&token=${process.env.FINNHUB_API_KEY}`;
+    const response = await fetch(url);      // built into Node — no library needed
+    const data = await response.json();
+
+    // Finnhub returns c (current price) = 0 for tickers it can't find.
+    // Treat that as "no data" rather than showing a fake $0.00.
+    if (!data || data.c === 0) {
+      return { ticker, error: 'No data found' };
+    }
+
+    return {
+      ticker,
+      price: data.c,            // current price
+      change: data.d,           // dollar change today
+      changePercent: data.dp,   // percent change today
+    };
+  } catch (err) {
+    // Network hiccup, bad key, Finnhub down, etc.
+    // One failed ticker should never break the other nine.
+    return { ticker, error: 'Failed to fetch' };
+  }
+}
+
+// ------------------------------------------------------------
+// ROUTE: GET /api/prices
+// Fetches a live quote for EVERY ticker on the watchlist at once.
+//
+// Promise.all runs all the requests IN PARALLEL. Without it, we'd
+// fetch AAPL, wait for it to finish, then fetch NVDA, wait, etc —
+// five tickers would take 5x as long as one. With Promise.all,
+// they all fire at the same time and we wait for the slowest one.
+// ------------------------------------------------------------
+app.get('/api/prices', async (req, res) => {
+  if (!process.env.FINNHUB_API_KEY) {
+    // This is what protects us: if the Railway variable is ever
+    // missing or mistyped, we get a clear error instead of a
+    // confusing silent failure.
+    return res.status(500).json({ error: 'Server is missing FINNHUB_API_KEY' });
+  }
+
+  const quotes = await Promise.all(
+    watchlist.map(ticker => fetchQuote(ticker))
+  );
+
+  res.json({ quotes });
+});
+
+// Health check — still here, still useful.
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'alive',
     time: new Date().toISOString(),
-    message: 'Stock tracker server is running'
+    message: 'Stock tracker server is running',
+    hasApiKey: Boolean(process.env.FINNHUB_API_KEY)   // handy for debugging
   });
 });
 
