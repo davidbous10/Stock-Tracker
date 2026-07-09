@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Stock Tracker</title>
+  <title>Trade Track</title>
   <link rel="icon" href="/logo.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -728,7 +728,7 @@
         <img src="/logo.svg" alt="" class="brand-mark" width="36" height="36" />
         <div>
           <div class="eyebrow">Personal terminal</div>
-          <h1>Stock Tracker</h1>
+          <h1>Trade Track</h1>
         </div>
       </div>
 
@@ -753,7 +753,7 @@
         <img src="/logo.svg" alt="" class="brand-mark" width="32" height="32" />
         <div>
           <div class="eyebrow">Personal terminal</div>
-          <div class="sidebar-title">Stock Tracker</div>
+          <div class="sidebar-title">Trade Track</div>
         </div>
       </div>
 
@@ -1121,7 +1121,7 @@
     setInterval(updateLastUpdatedLabel, 1000);
 
     async function loadWatchlist() {
-      const res = await fetch('/api/watchlist');
+      const res = await AuthGuard.fetch('/api/watchlist');
       const data = await res.json();
       if (!res.ok) {
         serverErrorEl.textContent = data.error || 'Could not load watchlist';
@@ -1136,7 +1136,7 @@
     async function loadPrices() {
       serverErrorEl.textContent = '';
       try {
-        const res = await fetch('/api/prices');
+        const res = await AuthGuard.fetch('/api/prices');
         const data = await res.json();
         if (!res.ok) {
           serverErrorEl.textContent = data.error || 'Could not load prices';
@@ -1158,7 +1158,7 @@
     // without doing pointless extra work.
     async function loadHistory() {
       try {
-        const res = await fetch('/api/history');
+        const res = await AuthGuard.fetch('/api/history');
         const data = await res.json();
         if (res.ok) {
           historyByTicker = data.history;
@@ -1181,7 +1181,7 @@
 
     async function loadAlerts() {
       try {
-        const res = await fetch('/api/alerts');
+        const res = await AuthGuard.fetch('/api/alerts');
         const data = await res.json();
         if (res.ok) {
           alertsByTicker = groupAlertsByTicker(data.alerts);
@@ -1193,7 +1193,7 @@
     }
 
     async function addAlert(ticker, conditionType, threshold) {
-      const res = await fetch('/api/alerts', {
+      const res = await AuthGuard.fetch('/api/alerts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ticker, conditionType, threshold }),
@@ -1206,7 +1206,7 @@
     }
 
     async function removeAlert(id) {
-      const res = await fetch('/api/alerts/' + id, { method: 'DELETE' });
+      const res = await AuthGuard.fetch('/api/alerts/' + id, { method: 'DELETE' });
       const data = await res.json();
       if (res.ok) {
         alertsByTicker = groupAlertsByTicker(data.alerts);
@@ -1219,7 +1219,7 @@
     // flow below). Returns the server's response data so callers
     // can tell success from failure without duplicating logic.
     async function addOneTicker(ticker, name) {
-      const res = await fetch('/api/watchlist', {
+      const res = await AuthGuard.fetch('/api/watchlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ticker, name: name || '' })
@@ -1250,7 +1250,7 @@
     // falling back to treating it as a literal ticker if search
     // finds nothing.
     async function resolveQuery(query) {
-      const searchRes = await fetch('/api/search?q=' + encodeURIComponent(query));
+      const searchRes = await AuthGuard.fetch('/api/search?q=' + encodeURIComponent(query));
       const searchData = await searchRes.json();
       if (searchData.results && searchData.results[0]) {
         return { ticker: searchData.results[0].symbol, name: searchData.results[0].name };
@@ -1309,7 +1309,7 @@
     }
 
     async function removeTicker(ticker) {
-      const res = await fetch('/api/watchlist/' + ticker, { method: 'DELETE' });
+      const res = await AuthGuard.fetch('/api/watchlist/' + ticker, { method: 'DELETE' });
       const data = await res.json();
       items = data.items;
       delete quotesByTicker[ticker];
@@ -1335,7 +1335,7 @@
     });
 
     async function runSearch(query) {
-      const res = await fetch('/api/search?q=' + encodeURIComponent(query));
+      const res = await AuthGuard.fetch('/api/search?q=' + encodeURIComponent(query));
       const data = await res.json();
       renderSuggestions(data.results || []);
     }
@@ -1483,7 +1483,7 @@
 
     async function saveOrder() {
       try {
-        await fetch('/api/watchlist/reorder', {
+        await AuthGuard.fetch('/api/watchlist/reorder', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ order: items.map(i => i.ticker) })
