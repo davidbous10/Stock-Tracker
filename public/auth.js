@@ -1,25 +1,44 @@
 // ============================================================
 // auth.js — shared login/session logic.
 //
-// Every page in this app (watchlist, home, and future ones like
-// sectors/articles) needs the SAME thing: check if someone's
-// logged in, show a login/signup card if not, and wire up logout.
-// Rather than copy-pasting that logic into every page's own
-// <script> block, it lives here once. Each page includes this
-// file, then calls AuthGuard.init(callback) — the callback only
-// ever runs once we KNOW someone is logged in.
+// Every page in this app (watchlist, home, settings, and future
+// ones like sectors/articles) needs the SAME thing: check if
+// someone's logged in, show a login/signup card if not, wire up
+// logout, and show who's logged in. Rather than copy-pasting that
+// logic into every page's own <script> block, it lives here once.
 //
 // This does assume each page's HTML includes the same auth-screen
 // markup (ids: authScreen, authForm, authEmail, authPassword,
-// authHint, authMsg, authSubmit, tabLogin, tabSignup) and a
-// logout button (id: logoutBtn). That HTML is small enough that
-// duplicating IT (not the JS) across pages is a reasonable
-// trade-off — see the SKILL notes in each page for exactly what
-// to copy.
+// authHint, authMsg, authSubmit, tabLogin, tabSignup) and, inside
+// the sidebar, a logout button (id: logoutBtn) and optionally
+// #accountEmail / #accountAvatar elements, which this file fills
+// in automatically if present — a page that doesn't have them
+// just doesn't get that piece, nothing breaks either way.
 // ============================================================
 
 const AuthGuard = (function () {
   let onReadyCallback = null;
+
+  // Same deterministic color-from-text trick used for ticker
+  // avatars on the watchlist page, reused here so a person's
+  // account initial is always the same color everywhere.
+  const BADGE_COLORS = ['#6C8EEF', '#3DDC97', '#FFB454', '#FF6B6B', '#B892FF', '#4FD1E8'];
+  function colorFor(text) {
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) hash = text.charCodeAt(i) + ((hash << 5) - hash);
+    return BADGE_COLORS[Math.abs(hash) % BADGE_COLORS.length];
+  }
+
+  function populateAccountInfo(email) {
+    const emailEl = document.getElementById('accountEmail');
+    if (emailEl) emailEl.textContent = email;
+
+    const avatarEl = document.getElementById('accountAvatar');
+    if (avatarEl && email) {
+      avatarEl.textContent = email[0].toUpperCase();
+      avatarEl.style.background = colorFor(email);
+    }
+  }
 
   function setAuthMode(mode) {
     const tabLogin = document.getElementById('tabLogin');
@@ -38,11 +57,12 @@ const AuthGuard = (function () {
     authSubmit.dataset.mode = mode;
   }
 
-  function showApp() {
+  function showApp(email) {
     document.getElementById('authScreen').style.display = 'none';
     const appRoot = document.getElementById('appRoot');
     appRoot.style.display = appRoot.dataset.display || 'block';
-    if (onReadyCallback) onReadyCallback();
+    populateAccountInfo(email);
+    if (onReadyCallback) onReadyCallback(email);
   }
 
   function showLogin() {
@@ -84,7 +104,7 @@ const AuthGuard = (function () {
           return;
         }
 
-        showApp();
+        showApp(data.email);
       } catch (err) {
         authMsg.textContent = 'Could not reach the server';
         authSubmit.disabled = false;
@@ -107,7 +127,8 @@ const AuthGuard = (function () {
   // loads. Wires up the login form, checks whether a session
   // already exists, and either shows the app immediately (existing
   // session) or shows the login card (none yet). `callback` only
-  // ever fires once we're sure someone's logged in.
+  // ever fires once we're sure someone's logged in, and receives
+  // the person's email as its argument.
   async function init(callback) {
     onReadyCallback = callback;
     wireAuthForm();
@@ -115,8 +136,9 @@ const AuthGuard = (function () {
 
     try {
       const res = await fetch('/api/auth/me');
+      const data = await res.json();
       if (res.ok) {
-        showApp();
+        showApp(data.email);
       } else {
         showLogin();
       }
