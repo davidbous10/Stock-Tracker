@@ -345,7 +345,13 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
 
     const match = await bcrypt.compare(currentPassword, rows[0].password_hash);
     if (!match) {
-      return res.status(401).json({ error: 'Current password is incorrect' });
+      // 400, not 401 — the person IS validly logged in here (that's
+      // what requireAuth already confirmed); they just got one field
+      // wrong. Using 401 would make this indistinguishable from "your
+      // session expired," which is about to matter: the frontend is
+      // going to treat any 401 from a protected route as "bounce back
+      // to login." We don't want a wrong-password typo doing that.
+      return res.status(400).json({ error: 'Current password is incorrect' });
     }
 
     const newHash = await bcrypt.hash(newPassword, 10);
@@ -662,7 +668,7 @@ async function sendAlertEmail(alert, quote) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'Stock Tracker <onboarding@resend.dev>',
+        from: 'Trade Track <onboarding@resend.dev>',
         to: [alert.user_email],
         subject: `${alert.ticker} alert: ${describeAlert(alert)}`,
         text: `${alert.ticker} is now $${quote.price.toFixed(2)} ` +
@@ -781,7 +787,7 @@ app.get('/api/health', async (req, res) => {
   res.json({
     status: 'alive',
     time: new Date().toISOString(),
-    message: 'Stock tracker server is running',
+    message: 'Trade Track server is running',
     hasApiKey: Boolean(process.env.FINNHUB_API_KEY),
     hasDatabase,
   });
@@ -793,7 +799,7 @@ app.get('/api/health', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`Stock tracker running on port ${PORT}`);
+  console.log(`Trade Track running on port ${PORT}`);
 });
 
 initDb();
