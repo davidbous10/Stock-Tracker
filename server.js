@@ -98,6 +98,27 @@ async function initDb(retries = 10, delayMs = 3000) {
         );
       }
 
+      // A brand new table for historical price points, one row per
+      // (ticker, moment we checked). This is a DIFFERENT table from
+      // "watchlist" on purpose — watchlist is "what you're tracking",
+      // price_history is "what we've observed over time" for those
+      // tickers. Keeping them separate keeps each table's job simple.
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS price_history (
+          id SERIAL PRIMARY KEY,
+          ticker TEXT NOT NULL,
+          price NUMERIC NOT NULL,
+          recorded_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      // An index makes "give me all the points for ticker X, in order"
+      // fast even once this table has thousands of rows — without it,
+      // Postgres would have to scan the entire table every single time.
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_price_history_ticker_time
+        ON price_history (ticker, recorded_at)
+      `);
+
       console.log('Database connected and ready.');
       dbReady = true;
       return;   // success — stop retrying
@@ -296,6 +317,89 @@ app.get('/api/prices', async (req, res) => {
 });
 
 // ------------------------------------------------------------
+// ROUTE: GET /api/history
+// Returns every stored price point for every ticker currently on
+// the watchlist, grouped by ticker, oldest first — exactly what a
+// sparkline needs to draw a trend line. One request covers the
+// whole list, same pattern as /api/prices.
+// ------------------------------------------------------------
+app.get('/api/history', async (req, res) => {
+  if (!requireDb(res)) return;
+
+  try {
+    const items = await getAllWatchlistItems();
+    const tickers = items.map(i => i.ticker);
+
+    if (tickers.length === 0) {
+      return res.json({ history: {} });
+    }
+
+    const { rows } = await pool.query(
+      'SELECT ticker, price, recorded_at FROM price_history WHERE ticker = ANY($1) ORDER BY recorded_at ASC',
+      [tickers]
+    );
+
+    // Build { AAPL: [{price, recorded_at}, ...], NVDA: [...] } so the
+    // frontend can look up each card's points by ticker directly.
+    const history = {};
+    tickers.forEach(t => { history[t] = []; });
+    rows.forEach(r => {
+      history[r.ticker].push({ price: parseFloat(r.price), recordedAt: r.recorded_at });
+    });
+
+    res.json({ history });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// ------------------------------------------------------------
+// SCHEDULED SNAPSHOTS — the first piece of the app that runs on
+// its own, independent of anyone having the page open.
+//
+// Every SNAPSHOT_INTERVAL_MS, we record the current price of every
+// watchlist ticker into price_history. Over hours and days, this
+// naturally builds up the trend line the sparkline draws — Finnhub's
+// free tier doesn't give us historical data directly, so we're
+// generating our own by simply checking regularly and remembering.
+// ------------------------------------------------------------
+const SNAPSHOT_INTERVAL_MS = 15 * 60 * 1000;   // 15 minutes
+const HISTORY_RETENTION_DAYS = 7;
+
+async function snapshotPrices() {
+  if (!dbReady) return;
+
+  // Fetching new prices needs Finnhub. Cleaning up old ones doesn't —
+  // they're two separate concerns, so a Finnhub outage or missing key
+  // should never be able to silently stop the housekeeping below.
+  if (process.env.FINNHUB_API_KEY) {
+    try {
+      const items = await getAllWatchlistItems();
+      for (const item of items) {
+        const quote = await fetchQuote(item.ticker);
+        if (!quote.error) {
+          await pool.query(
+            'INSERT INTO price_history (ticker, price) VALUES ($1, $2)',
+            [item.ticker, quote.price]
+          );
+        }
+      }
+      console.log(`Snapshotted prices for ${items.length} ticker(s).`);
+    } catch (err) {
+      console.log('Price snapshot failed:', err.message);
+    }
+  }
+
+  try {
+    await pool.query(
+      `DELETE FROM price_history WHERE recorded_at < NOW() - INTERVAL '${HISTORY_RETENTION_DAYS} days'`
+    );
+  } catch (err) {
+    console.log('History cleanup failed:', err.message);
+  }
+}
+
+// ------------------------------------------------------------
 // SEARCH (unchanged from Phase 1c)
 // ------------------------------------------------------------
 const FINNHUB_SEARCH_URL = 'https://finnhub.io/api/v1/search';
@@ -368,3 +472,9 @@ app.listen(PORT, () => {
 });
 
 initDb();   // fires immediately, retries quietly in the background
+
+// Take one snapshot shortly after startup, so charts have at least
+// one data point without waiting a full 15 minutes for the first
+// scheduled run. Then keep snapshotting on the regular interval.
+setTimeout(snapshotPrices, 8000);
+setInterval(snapshotPrices, SNAPSHOT_INTERVAL_MS);
