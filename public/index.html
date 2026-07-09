@@ -372,6 +372,86 @@
 
     .card-footer-msg { font-size: 12px; color: var(--text-faint); }
 
+    .btn-bell {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      background: none;
+      border: none;
+      color: var(--text-faint);
+      cursor: pointer;
+      padding: 0;
+    }
+    .btn-bell:hover { color: var(--accent); }
+    .btn-bell.has-alerts { color: var(--accent); }
+    .bell-count {
+      font-family: var(--font-data);
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .alerts-panel {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-soft);
+    }
+    .alert-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      font-size: 12px;
+    }
+    .alert-label { color: var(--text); flex: 1; }
+    .alert-fired {
+      font-size: 10px;
+      color: var(--text-faint);
+      font-style: italic;
+    }
+    .btn-alert-remove {
+      background: none;
+      border: none;
+      color: var(--text-faint);
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0 2px;
+    }
+    .btn-alert-remove:hover { color: var(--down); }
+    .alert-empty {
+      font-size: 12px;
+      color: var(--text-faint);
+      padding: 4px 0 8px;
+    }
+    .alert-form {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .alert-type-select, .alert-threshold-input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 12px;
+      font-family: var(--font-ui);
+      padding: 6px 8px;
+    }
+    .alert-type-select { flex: 1.4; }
+    .alert-threshold-input { flex: 1; min-width: 0; }
+    .btn-alert-add {
+      background: var(--accent);
+      color: #0B1220;
+      border: none;
+      border-radius: 6px;
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 700;
+      font-family: var(--font-ui);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
     .btn-remove {
       background: none;
       border: none;
@@ -475,6 +555,8 @@
     let items = [];
     let quotesByTicker = {};
     let historyByTicker = {};
+    let alertsByTicker = {};
+    let openAlertTicker = null;   // which card's alert panel is currently expanded
     let lastUpdatedAt = null;
 
     function esc(str) {
@@ -574,6 +656,60 @@
         </svg>
       </span>`;
 
+    function conditionLabel(alert) {
+      const t = parseFloat(alert.threshold);
+      switch (alert.condition_type) {
+        case 'percent_drop': return `Drops ${t}% in a day`;
+        case 'percent_gain': return `Rises ${t}% in a day`;
+        case 'price_above': return `Price reaches $${t.toFixed(2)}`;
+        case 'price_below': return `Price falls to $${t.toFixed(2)}`;
+        default: return 'Alert';
+      }
+    }
+
+    function alertsPanelHtml(ticker) {
+      const alerts = alertsByTicker[ticker] || [];
+
+      const rowsHtml = alerts.length
+        ? alerts.map(a => `
+            <div class="alert-row">
+              <span class="alert-label">${esc(conditionLabel(a))}</span>
+              ${!a.active ? '<span class="alert-fired">fired \u2014 off</span>' : ''}
+              <button class="btn-alert-remove" data-id="${a.id}" title="Delete alert">\u00d7</button>
+            </div>
+          `).join('')
+        : '<div class="alert-empty">No alerts set for this ticker yet</div>';
+
+      return `
+        <div class="alerts-panel">
+          ${rowsHtml}
+          <div class="alert-form">
+            <select class="alert-type-select">
+              <option value="percent_drop">Drops by %</option>
+              <option value="percent_gain">Rises by %</option>
+              <option value="price_above">Price reaches $</option>
+              <option value="price_below">Price falls to $</option>
+            </select>
+            <input type="number" class="alert-threshold-input" placeholder="5" min="0" step="0.01" />
+            <button class="btn-alert-add" data-ticker="${esc(ticker)}">Set alert</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function bellButtonHtml(ticker) {
+      const activeCount = (alertsByTicker[ticker] || []).filter(a => a.active).length;
+      return `
+        <button class="btn-bell ${activeCount ? 'has-alerts' : ''}" data-ticker="${esc(ticker)}" title="Manage alerts">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          ${activeCount ? `<span class="bell-count">${activeCount}</span>` : ''}
+        </button>
+      `;
+    }
+
     function cardHtml(item) {
       const q = quotesByTicker[item.ticker];
       const nameHtml = item.name ? `<div class="company-name">${esc(item.name)}</div>` : '';
@@ -637,6 +773,7 @@
               <div class="card-id">
                 <div class="ticker-row">
                   <span class="ticker">${esc(item.ticker)}</span>
+                  ${bellButtonHtml(item.ticker)}
                   <button class="btn-remove" data-ticker="${esc(item.ticker)}">Remove</button>
                 </div>
                 ${nameHtml}
@@ -648,6 +785,7 @@
             </div>
             <div class="sparkline-wrap">${sparklineHtml(item.ticker)}</div>
             ${rangeBarHtml(q)}
+            ${openAlertTicker === item.ticker ? alertsPanelHtml(item.ticker) : ''}
           </div>
         </div>
       `;
@@ -730,6 +868,50 @@
       } catch (err) {
         // Silent on purpose — the sparkline just shows its
         // "collecting history" placeholder until this succeeds.
+      }
+    }
+
+    function groupAlertsByTicker(alerts) {
+      const grouped = {};
+      alerts.forEach(a => {
+        if (!grouped[a.ticker]) grouped[a.ticker] = [];
+        grouped[a.ticker].push(a);
+      });
+      return grouped;
+    }
+
+    async function loadAlerts() {
+      try {
+        const res = await fetch('/api/alerts');
+        const data = await res.json();
+        if (res.ok) {
+          alertsByTicker = groupAlertsByTicker(data.alerts);
+          render();
+        }
+      } catch (err) {
+        // Silent — alert badges just won't show counts until this succeeds.
+      }
+    }
+
+    async function addAlert(ticker, conditionType, threshold) {
+      const res = await fetch('/api/alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticker, conditionType, threshold }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alertsByTicker = groupAlertsByTicker(data.alerts);
+        render();
+      }
+    }
+
+    async function removeAlert(id) {
+      const res = await fetch('/api/alerts/' + id, { method: 'DELETE' });
+      const data = await res.json();
+      if (res.ok) {
+        alertsByTicker = groupAlertsByTicker(data.alerts);
+        render();
       }
     }
 
@@ -821,8 +1003,34 @@
     input.addEventListener('keydown', e => { if (e.key === 'Enter') addTicker(); });
 
     listEl.addEventListener('click', e => {
-      const btn = e.target.closest('.btn-remove');
-      if (btn) removeTicker(btn.dataset.ticker);
+      const removeBtn = e.target.closest('.btn-remove');
+      if (removeBtn) { removeTicker(removeBtn.dataset.ticker); return; }
+
+      const bellBtn = e.target.closest('.btn-bell');
+      if (bellBtn) {
+        const t = bellBtn.dataset.ticker;
+        openAlertTicker = (openAlertTicker === t) ? null : t;
+        render();
+        return;
+      }
+
+      const addAlertBtn = e.target.closest('.btn-alert-add');
+      if (addAlertBtn) {
+        const panel = addAlertBtn.closest('.alerts-panel');
+        const conditionType = panel.querySelector('.alert-type-select').value;
+        const thresholdInput = panel.querySelector('.alert-threshold-input');
+        const threshold = parseFloat(thresholdInput.value);
+
+        if (!Number.isFinite(threshold) || threshold <= 0) {
+          thresholdInput.focus();
+          return;
+        }
+        addAlert(addAlertBtn.dataset.ticker, conditionType, threshold);
+        return;
+      }
+
+      const removeAlertBtn = e.target.closest('.btn-alert-remove');
+      if (removeAlertBtn) { removeAlert(removeAlertBtn.dataset.id); return; }
     });
 
     // ---- DRAG-AND-DROP REORDERING ----
@@ -909,8 +1117,10 @@
     }
 
     loadWatchlist();
+    loadAlerts();
     setInterval(loadPrices, 30000);
     setInterval(loadHistory, 120000);
+    setInterval(loadAlerts, 120000);
   </script>
 </body>
 </html>
