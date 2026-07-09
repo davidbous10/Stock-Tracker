@@ -80,7 +80,7 @@ async function initDb(retries = 10, delayMs = 3000) {
       dbReady = true;
       return;   // success — stop retrying
     } catch (err) {
-      console.log(`Database not ready yet (attempt ${attempt}/${retries}): ${err.message}`);
+      console.log(`Database not ready yet (attempt ${attempt}/${retries}): code=${err.code} message=${err.message} address=${err.address} port=${err.port} host=${err.hostname || ''}`);
       if (attempt === retries) {
         // Out of attempts. Don't crash the whole process — just
         // leave dbReady false. The health check and every DB
