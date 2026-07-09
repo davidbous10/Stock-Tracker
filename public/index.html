@@ -4,156 +4,402 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Stock Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --bg: #0B1220;
+      --surface: #131B2E;
+      --surface-hover: #182240;
+      --border: #232E47;
+      --border-soft: #1B2438;
+      --text: #EDF1F7;
+      --text-muted: #7C8AA5;
+      --text-faint: #4E5A75;
+      --accent: #6C8EEF;
+      --up: #3DDC97;
+      --up-bg: #12271F;
+      --down: #FF6B6B;
+      --down-bg: #2B1A1E;
+
+      --font-ui: 'Inter', system-ui, sans-serif;
+      --font-data: 'IBM Plex Mono', monospace;
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       min-height: 100vh;
-      background: #0E1420;
-      color: #E8ECF2;
-      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-ui);
       display: flex;
       justify-content: center;
-      padding: 40px 20px;
+      padding: 48px 20px;
     }
 
-    .app { width: 100%; max-width: 600px; }
+    .app { width: 100%; max-width: 660px; }
 
-    .top-row { display: flex; justify-content: space-between; align-items: baseline; }
-    h1 { font-size: 22px; letter-spacing: 0.03em; }
-    .sub { color: #8A96AC; font-size: 13px; margin: 4px 0 24px; }
-
+    /* ---- Header ---- */
+    .eyebrow {
+      font-family: var(--font-data);
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 8px;
+    }
+    h1 {
+      font-size: 34px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 10px 0 20px;
+    }
+    .meta { font-size: 13px; color: var(--text-muted); }
     .refresh-btn {
       background: none;
-      border: 1px solid #26314A;
-      color: #8A96AC;
-      border-radius: 6px;
-      padding: 6px 12px;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: 8px;
+      padding: 8px 14px;
       font-size: 12px;
-      cursor: pointer;
-    }
-    .refresh-btn:hover { background: #171F2E; color: #E8ECF2; }
-
-    .add-wrap { position: relative; margin-bottom: 10px; }
-    .add-row { display: flex; gap: 10px; }
-
-    input {
-      flex: 1;
-      background: #171F2E;
-      border: 1px solid #26314A;
-      border-radius: 8px;
-      padding: 12px 14px;
-      color: #E8ECF2;
-      font-size: 15px;
-      outline: none;
-    }
-    input:focus { border-color: #3D6FA8; }
-
-    .btn-add {
-      background: #2E6E4E;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      padding: 12px 22px;
-      font-size: 15px;
+      font-family: var(--font-ui);
       font-weight: 600;
       cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
     }
-    .btn-add:hover { background: #255C41; }
+    .refresh-btn:hover { border-color: var(--accent); color: var(--text); }
+
+    /* ---- Summary strip: immediate at-a-glance signal ---- */
+    .summary {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .summary-pill {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .summary-pill .label {
+      font-size: 11px;
+      color: var(--text-faint);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 4px;
+    }
+    .summary-pill .value {
+      font-family: var(--font-data);
+      font-size: 22px;
+      font-weight: 700;
+    }
+    .summary-pill.up .value { color: var(--up); }
+    .summary-pill.down .value { color: var(--down); }
+
+    /* ---- Search ---- */
+    .add-wrap { position: relative; margin-bottom: 24px; }
+    .add-row {
+      display: flex;
+      gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 5px;
+      transition: border-color 0.15s;
+    }
+    .add-row:focus-within { border-color: var(--accent); }
+    .search-icon { display: flex; align-items: center; padding-left: 12px; color: var(--text-faint); }
+    input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      padding: 11px 8px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: var(--font-ui);
+      outline: none;
+    }
+    input::placeholder { color: var(--text-faint); }
+    .btn-add {
+      background: var(--accent);
+      color: #0B1220;
+      border: none;
+      border-radius: 8px;
+      padding: 0 20px;
+      font-size: 13px;
+      font-weight: 700;
+      font-family: var(--font-ui);
+      cursor: pointer;
+    }
+    .btn-add:hover { opacity: 0.9; }
 
     .suggestions {
       position: absolute;
-      top: calc(100% + 6px);
+      top: calc(100% + 8px);
       left: 0;
       right: 0;
-      background: #171F2E;
-      border: 1px solid #26314A;
-      border-radius: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
       overflow: hidden;
       z-index: 10;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.4);
     }
     .suggestion {
       display: flex;
-      justify-content: space-between;
-      align-items: baseline;
+      align-items: center;
       gap: 12px;
-      padding: 10px 14px;
+      padding: 11px 14px;
       cursor: pointer;
-      border-bottom: 1px solid #1E2738;
+      border-bottom: 1px solid var(--border-soft);
     }
     .suggestion:last-child { border-bottom: none; }
-    .suggestion:hover { background: #1E2A3F; }
-    .s-symbol { font-weight: 700; letter-spacing: 0.04em; white-space: nowrap; }
+    .suggestion:hover { background: var(--surface-hover); }
+    .s-symbol {
+      font-family: var(--font-data);
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      min-width: 52px;
+    }
     .s-name {
-      color: #8A96AC;
+      color: var(--text-muted);
       font-size: 13px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    .msg { min-height: 20px; font-size: 13px; margin-bottom: 14px; }
-    .msg.error { color: #F87171; }
+    .msg { min-height: 18px; font-size: 13px; margin: -14px 0 14px 4px; }
+    .msg.error { color: var(--down); }
+    .server-error {
+      color: var(--down);
+      font-size: 13px;
+      background: var(--down-bg);
+      border: 1px solid #4A2329;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+    }
+    .server-error:empty { display: none; }
 
-    .list {
-      background: #171F2E;
-      border: 1px solid #26314A;
-      border-radius: 12px;
-      overflow: hidden;
+    /* ---- Watchlist cards ---- */
+    .list { display: flex; flex-direction: column; gap: 10px; }
+    .empty {
+      padding: 56px 24px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 14px;
+      border: 1px dashed var(--border);
+      border-radius: 14px;
     }
 
-    .row {
+    .card {
+      display: flex;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 18px;
+      transition: border-color 0.15s, transform 0.1s;
+      gap: 14px;
+    }
+    .card:hover { border-color: #2C3B5C; transform: translateY(-1px); }
+    .card.dir-up { border-left-color: var(--up); }
+    .card.dir-down { border-left-color: var(--down); }
+
+    /* Logo / avatar */
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      flex-shrink: 0;
+      object-fit: contain;
+      background: #fff;
+      padding: 4px;
+    }
+    .avatar-fallback {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      flex-shrink: 0;
       display: flex;
       align-items: center;
+      justify-content: center;
+      font-family: var(--font-data);
+      font-weight: 700;
+      font-size: 15px;
+      color: #0B1220;
+    }
+
+    .card-body { flex: 1; min-width: 0; }
+    .card-top {
+      display: flex;
       justify-content: space-between;
-      padding: 14px 18px;
-      border-bottom: 1px solid #26314A;
+      align-items: flex-start;
+      margin-bottom: 12px;
     }
-    .row:last-child { border-bottom: none; }
+    .card-id { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .ticker-row { display: flex; align-items: baseline; gap: 8px; }
+    .ticker {
+      font-family: var(--font-data);
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .company-name {
+      font-size: 12px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 200px;
+    }
 
-    .left { display: flex; align-items: baseline; gap: 12px; }
-    .ticker { font-size: 16px; font-weight: 600; letter-spacing: 0.06em; }
-
-    .price { font-size: 15px; font-variant-numeric: tabular-nums; color: #8A96AC; }
-    .price.loaded { color: #E8ECF2; }
-
-    .change {
-      font-size: 13px;
+    .card-price { text-align: right; flex-shrink: 0; }
+    .price {
+      font-family: var(--font-data);
+      font-size: 24px;
+      font-weight: 700;
       font-variant-numeric: tabular-nums;
-      padding: 2px 8px;
-      border-radius: 5px;
+      line-height: 1;
     }
-    .change.up { color: #4ADE80; background: #12281C; }
-    .change.down { color: #F87171; background: #2A1518; }
-    .change.flat { color: #8A96AC; background: #1B2432; }
+    .change {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      margin-top: 6px;
+      font-family: var(--font-data);
+      font-size: 12px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+    .change.up { color: var(--up); background: var(--up-bg); }
+    .change.down { color: var(--down); background: var(--down-bg); }
+    .change.flat { color: var(--text-muted); background: var(--border-soft); }
+
+    /* ---- Day range bar ---- */
+    .range-row { display: flex; align-items: center; gap: 10px; }
+    .range-label {
+      font-family: var(--font-data);
+      font-size: 10px;
+      color: var(--text-faint);
+      width: 50px;
+      text-align: right;
+    }
+    .range-label.left { text-align: left; }
+    .range-track {
+      position: relative;
+      flex: 1;
+      height: 5px;
+      background: var(--border-soft);
+      border-radius: 3px;
+      overflow: visible;
+    }
+    .range-fill {
+      position: absolute;
+      top: 0; left: 0;
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--down), var(--up));
+      opacity: 0.35;
+    }
+    .range-dot {
+      position: absolute;
+      top: 50%;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      border: 2px solid var(--surface);
+      box-shadow: 0 0 0 1px var(--border);
+    }
+    .range-dot.up { background: var(--up); }
+    .range-dot.down { background: var(--down); }
+    .range-dot.flat { background: var(--text-muted); }
+
+    .card-footer-msg { font-size: 12px; color: var(--text-faint); }
 
     .btn-remove {
       background: none;
-      border: 1px solid #58222A;
-      color: #F87171;
-      border-radius: 6px;
-      padding: 5px 12px;
-      font-size: 12px;
+      border: none;
+      color: var(--text-faint);
+      font-size: 11px;
+      font-family: var(--font-ui);
       cursor: pointer;
+      padding: 0;
+      flex-shrink: 0;
+      white-space: nowrap;
     }
-    .btn-remove:hover { background: #2A1518; }
+    .btn-remove:hover { color: var(--down); }
 
-    .empty { padding: 24px; text-align: center; color: #8A96AC; font-size: 14px; }
-    .server-error { color: #F87171; font-size: 13px; margin-bottom: 14px; }
+    /* ---- Skeleton loading ---- */
+    .skeleton {
+      background: linear-gradient(90deg, var(--border-soft) 25%, var(--border) 37%, var(--border-soft) 63%);
+      background-size: 400% 100%;
+      animation: shimmer 1.6s ease infinite;
+      border-radius: 4px;
+    }
+    @keyframes shimmer {
+      0% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .skel-price { width: 70px; height: 24px; margin-left: auto; }
+    .skel-change { width: 48px; height: 18px; margin: 6px 0 0 auto; }
+    .skel-range { width: 100%; height: 5px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .skeleton { animation: none; }
+      .card { transition: none; }
+    }
+
+    @media (max-width: 480px) {
+      .company-name { max-width: 120px; }
+      h1 { font-size: 28px; }
+    }
   </style>
 </head>
 <body>
   <div class="app">
-    <div class="top-row">
-      <div>
-        <h1>STOCK TRACKER</h1>
-        <div class="sub">Phase 1c — search by name</div>
-      </div>
+    <div class="eyebrow">Personal terminal</div>
+    <h1>Stock Tracker</h1>
+    <div class="meta-row">
+      <div class="meta" id="lastUpdated">not yet loaded</div>
       <button class="refresh-btn" id="refreshBtn">↻ Refresh</button>
+    </div>
+
+    <div class="summary" id="summary" style="display:none;">
+      <div class="summary-pill up">
+        <div class="label">Up today</div>
+        <div class="value" id="upCount">0</div>
+      </div>
+      <div class="summary-pill down">
+        <div class="label">Down today</div>
+        <div class="value" id="downCount">0</div>
+      </div>
+      <div class="summary-pill">
+        <div class="label">Watching</div>
+        <div class="value" id="watchCount">0</div>
+      </div>
     </div>
 
     <div class="add-wrap">
       <div class="add-row">
+        <span class="search-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </span>
         <input id="tickerInput" placeholder="Search company or ticker (e.g. Amazon)" autocomplete="off" />
         <button class="btn-add" id="addBtn">Add</button>
       </div>
@@ -173,9 +419,15 @@
     const serverErrorEl = document.getElementById('serverError');
     const listEl = document.getElementById('list');
     const suggestionsEl = document.getElementById('suggestions');
+    const summaryEl = document.getElementById('summary');
+    const watchCountEl = document.getElementById('watchCount');
+    const upCountEl = document.getElementById('upCount');
+    const downCountEl = document.getElementById('downCount');
+    const lastUpdatedEl = document.getElementById('lastUpdated');
 
-    let tickers = [];
+    let items = [];
     let quotesByTicker = {};
+    let lastUpdatedAt = null;
 
     function esc(str) {
       const div = document.createElement('div');
@@ -183,43 +435,161 @@
       return div.innerHTML;
     }
 
+    // A handful of accent colors for the fallback avatar badge, picked
+    // deterministically per ticker (same ticker always gets the same
+    // color) so the UI feels designed, not random on every reload.
+    const BADGE_COLORS = ['#6C8EEF', '#3DDC97', '#FFB454', '#FF6B6B', '#B892FF', '#4FD1E8'];
+    function badgeColor(ticker) {
+      let hash = 0;
+      for (let i = 0; i < ticker.length; i++) hash = ticker.charCodeAt(i) + ((hash << 5) - hash);
+      return BADGE_COLORS[Math.abs(hash) % BADGE_COLORS.length];
+    }
+
+    function avatarHtml(item) {
+      if (item.logo) {
+        return `<img class="avatar" src="${esc(item.logo)}" alt=""
+                 onerror="this.outerHTML='<div class=&quot;avatar-fallback&quot; style=&quot;background:${badgeColor(item.ticker)}&quot;>${item.ticker[0]}</div>'" />`;
+      }
+      return `<div class="avatar-fallback" style="background:${badgeColor(item.ticker)}">${esc(item.ticker[0])}</div>`;
+    }
+
+    function rangeBarHtml(q) {
+      const { dayLow: lo, dayHigh: hi, price } = q;
+      if (lo == null || hi == null || price == null) {
+        return `<div class="range-row">
+          <span class="range-label left"></span>
+          <div class="range-track"><div class="skeleton skel-range"></div></div>
+          <span class="range-label"></span>
+        </div>`;
+      }
+      const pct = hi === lo ? 50 : Math.max(0, Math.min(100, ((price - lo) / (hi - lo)) * 100));
+      const dir = q.changePercent > 0 ? 'up' : q.changePercent < 0 ? 'down' : 'flat';
+
+      return `
+        <div class="range-row">
+          <span class="range-label left">$${lo.toFixed(2)}</span>
+          <div class="range-track">
+            <div class="range-fill" style="width:${pct}%"></div>
+            <div class="range-dot ${dir}" style="left:${pct}%"></div>
+          </div>
+          <span class="range-label">$${hi.toFixed(2)}</span>
+        </div>
+      `;
+    }
+
+    function cardHtml(item) {
+      const q = quotesByTicker[item.ticker];
+      const nameHtml = item.name ? `<div class="company-name">${esc(item.name)}</div>` : '';
+      const dirClass = q && !q.error ? (q.changePercent > 0 ? 'dir-up' : q.changePercent < 0 ? 'dir-down' : '') : '';
+
+      if (!q) {
+        return `
+          <div class="card">
+            ${avatarHtml(item)}
+            <div class="card-body">
+              <div class="card-top">
+                <div class="card-id">
+                  <div class="ticker-row"><span class="ticker">${esc(item.ticker)}</span></div>
+                  ${nameHtml}
+                </div>
+                <div class="card-price">
+                  <div class="skeleton skel-price"></div>
+                  <div class="skeleton skel-change"></div>
+                </div>
+              </div>
+              <div class="range-row">
+                <span class="range-label left"></span>
+                <div class="range-track"><div class="skeleton skel-range"></div></div>
+                <span class="range-label"></span>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (q.error) {
+        return `
+          <div class="card">
+            ${avatarHtml(item)}
+            <div class="card-body">
+              <div class="card-top">
+                <div class="card-id">
+                  <div class="ticker-row"><span class="ticker">${esc(item.ticker)}</span></div>
+                  ${nameHtml}
+                </div>
+                <button class="btn-remove" data-ticker="${esc(item.ticker)}">Remove</button>
+              </div>
+              <div class="card-footer-msg">${esc(q.error)}</div>
+            </div>
+          </div>
+        `;
+      }
+
+      const dir = q.changePercent > 0 ? 'up' : q.changePercent < 0 ? 'down' : 'flat';
+      const arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '–';
+      const sign = q.changePercent > 0 ? '+' : '';
+
+      return `
+        <div class="card ${dirClass}">
+          ${avatarHtml(item)}
+          <div class="card-body">
+            <div class="card-top">
+              <div class="card-id">
+                <div class="ticker-row">
+                  <span class="ticker">${esc(item.ticker)}</span>
+                  <button class="btn-remove" data-ticker="${esc(item.ticker)}">Remove</button>
+                </div>
+                ${nameHtml}
+              </div>
+              <div class="card-price">
+                <div class="price">$${q.price.toFixed(2)}</div>
+                <div class="change ${dir}">${arrow} ${sign}${q.changePercent.toFixed(2)}%</div>
+              </div>
+            </div>
+            ${rangeBarHtml(q)}
+          </div>
+        </div>
+      `;
+    }
+
     function render() {
-      if (tickers.length === 0) {
-        listEl.innerHTML = '<div class="empty">Watchlist is empty — add a ticker above</div>';
+      if (items.length === 0) {
+        summaryEl.style.display = 'none';
+        listEl.innerHTML = '<div class="empty">Your watchlist is empty — search for a company above to start tracking it</div>';
         return;
       }
 
-      listEl.innerHTML = tickers.map(t => {
-        const q = quotesByTicker[t];
-        let priceHtml = '<span class="price">loading…</span>';
-        let changeHtml = '';
-
-        if (q && q.error) {
-          priceHtml = `<span class="price">${esc(q.error)}</span>`;
-        } else if (q) {
-          priceHtml = `<span class="price loaded">$${q.price.toFixed(2)}</span>`;
-          const dir = q.changePercent > 0 ? 'up' : q.changePercent < 0 ? 'down' : 'flat';
-          const sign = q.changePercent > 0 ? '+' : '';
-          changeHtml = `<span class="change ${dir}">${sign}${q.changePercent.toFixed(2)}%</span>`;
+      let up = 0, down = 0;
+      items.forEach(item => {
+        const q = quotesByTicker[item.ticker];
+        if (q && !q.error) {
+          if (q.changePercent > 0) up++;
+          else if (q.changePercent < 0) down++;
         }
+      });
+      watchCountEl.textContent = items.length;
+      upCountEl.textContent = up;
+      downCountEl.textContent = down;
+      summaryEl.style.display = 'flex';
 
-        return `
-          <div class="row">
-            <div class="left">
-              <span class="ticker">${esc(t)}</span>
-              ${priceHtml}
-              ${changeHtml}
-            </div>
-            <button class="btn-remove" data-ticker="${esc(t)}">Remove</button>
-          </div>
-        `;
-      }).join('');
+      listEl.innerHTML = items.map(cardHtml).join('');
     }
+
+    function updateLastUpdatedLabel() {
+      if (!lastUpdatedAt) return;
+      const secs = Math.floor((Date.now() - lastUpdatedAt) / 1000);
+      lastUpdatedEl.textContent = secs < 5 ? 'Updated just now' : `Updated ${secs}s ago`;
+    }
+    setInterval(updateLastUpdatedLabel, 1000);
 
     async function loadWatchlist() {
       const res = await fetch('/api/watchlist');
       const data = await res.json();
-      tickers = data.tickers;
+      if (!res.ok) {
+        serverErrorEl.textContent = data.error || 'Could not load watchlist';
+        return;
+      }
+      items = data.items;
       render();
       loadPrices();
     }
@@ -235,17 +605,19 @@
         }
         quotesByTicker = {};
         data.quotes.forEach(q => { quotesByTicker[q.ticker] = q; });
+        lastUpdatedAt = Date.now();
+        updateLastUpdatedLabel();
         render();
       } catch (err) {
         serverErrorEl.textContent = 'Could not reach the server';
       }
     }
 
-    async function addTickerDirect(ticker) {
+    async function addTickerDirect(ticker, name) {
       const res = await fetch('/api/watchlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticker })
+        body: JSON.stringify({ ticker, name: name || '' })
       });
       const data = await res.json();
 
@@ -258,7 +630,7 @@
       msgEl.textContent = '';
       input.value = '';
       suggestionsEl.innerHTML = '';
-      tickers = data.tickers;
+      items = data.items;
       render();
       loadPrices();
     }
@@ -267,23 +639,20 @@
       const query = input.value.trim();
       if (!query) return;
 
-      msgEl.textContent = 'Searching…';
-      msgEl.className = 'msg';
-
       const searchRes = await fetch('/api/search?q=' + encodeURIComponent(query));
       const searchData = await searchRes.json();
 
-      const ticker = (searchData.results && searchData.results[0])
-        ? searchData.results[0].symbol
-        : query.toUpperCase();
-
-      addTickerDirect(ticker);
+      if (searchData.results && searchData.results[0]) {
+        addTickerDirect(searchData.results[0].symbol, searchData.results[0].name);
+      } else {
+        addTickerDirect(query.toUpperCase(), null);
+      }
     }
 
     async function removeTicker(ticker) {
       const res = await fetch('/api/watchlist/' + ticker, { method: 'DELETE' });
       const data = await res.json();
-      tickers = data.tickers;
+      items = data.items;
       delete quotesByTicker[ticker];
       render();
     }
@@ -293,12 +662,10 @@
     input.addEventListener('input', () => {
       clearTimeout(searchTimer);
       const query = input.value.trim();
-
       if (query.length < 2) {
         suggestionsEl.innerHTML = '';
         return;
       }
-
       searchTimer = setTimeout(() => runSearch(query), 300);
     });
 
@@ -314,7 +681,7 @@
         return;
       }
       suggestionsEl.innerHTML = results.map(r => `
-        <div class="suggestion" data-symbol="${esc(r.symbol)}">
+        <div class="suggestion" data-symbol="${esc(r.symbol)}" data-name="${esc(r.name)}">
           <span class="s-symbol">${esc(r.symbol)}</span>
           <span class="s-name">${esc(r.name)}</span>
         </div>
@@ -323,7 +690,7 @@
 
     suggestionsEl.addEventListener('click', e => {
       const item = e.target.closest('.suggestion');
-      if (item) addTickerDirect(item.dataset.symbol);
+      if (item) addTickerDirect(item.dataset.symbol, item.dataset.name);
     });
 
     document.addEventListener('click', e => {
