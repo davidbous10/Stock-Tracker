@@ -119,6 +119,26 @@ async function initDb(retries = 10, delayMs = 3000) {
         ON price_history (ticker, recorded_at)
       `);
 
+      // Alert rules. condition_type is one of:
+      //   percent_drop / percent_gain — checked against today's % move,
+      //     allowed to refire once every 24h (the underlying % change
+      //     itself resets daily, so this pairs naturally)
+      //   price_above / price_below — a fixed dollar threshold, fires
+      //     once and then auto-deactivates (active = false), since a
+      //     stock parked above/below a price for weeks shouldn't email
+      //     you daily about it
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS alerts (
+          id SERIAL PRIMARY KEY,
+          ticker TEXT NOT NULL,
+          condition_type TEXT NOT NULL,
+          threshold NUMERIC NOT NULL,
+          active BOOLEAN DEFAULT true,
+          last_triggered_at TIMESTAMP,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+
       console.log('Database connected and ready.');
       dbReady = true;
       return;   // success — stop retrying
@@ -354,6 +374,63 @@ app.get('/api/history', async (req, res) => {
 });
 
 // ------------------------------------------------------------
+// ALERT ROUTES — create, list, and delete alert rules. The actual
+// checking and emailing happens in runScheduledChecks() below,
+// not here — these routes only manage the rules themselves.
+// ------------------------------------------------------------
+const VALID_ALERT_TYPES = ['percent_drop', 'percent_gain', 'price_above', 'price_below'];
+
+app.get('/api/alerts', async (req, res) => {
+  if (!requireDb(res)) return;
+  try {
+    const { rows } = await pool.query('SELECT * FROM alerts ORDER BY created_at DESC');
+    res.json({ alerts: rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+app.post('/api/alerts', async (req, res) => {
+  if (!requireDb(res)) return;
+
+  const ticker = (req.body.ticker || '').trim().toUpperCase();
+  const conditionType = req.body.conditionType;
+  const threshold = parseFloat(req.body.threshold);
+
+  if (!/^[A-Z]{1,6}(\.[A-Z])?$/.test(ticker)) {
+    return res.status(400).json({ error: 'Invalid ticker symbol' });
+  }
+  if (!VALID_ALERT_TYPES.includes(conditionType)) {
+    return res.status(400).json({ error: 'Invalid alert type' });
+  }
+  if (!Number.isFinite(threshold) || threshold <= 0) {
+    return res.status(400).json({ error: 'Threshold must be a positive number' });
+  }
+
+  try {
+    await pool.query(
+      'INSERT INTO alerts (ticker, condition_type, threshold) VALUES ($1, $2, $3)',
+      [ticker, conditionType, threshold]
+    );
+    const { rows } = await pool.query('SELECT * FROM alerts ORDER BY created_at DESC');
+    res.json({ alerts: rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+app.delete('/api/alerts/:id', async (req, res) => {
+  if (!requireDb(res)) return;
+  try {
+    await pool.query('DELETE FROM alerts WHERE id = $1', [req.params.id]);
+    const { rows } = await pool.query('SELECT * FROM alerts ORDER BY created_at DESC');
+    res.json({ alerts: rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// ------------------------------------------------------------
 // SCHEDULED SNAPSHOTS — the first piece of the app that runs on
 // its own, independent of anyone having the page open.
 //
@@ -365,13 +442,104 @@ app.get('/api/history', async (req, res) => {
 // ------------------------------------------------------------
 const SNAPSHOT_INTERVAL_MS = 15 * 60 * 1000;   // 15 minutes
 const HISTORY_RETENTION_DAYS = 7;
+const ALERT_COOLDOWN_MS = 24 * 60 * 60 * 1000;   // 24 hours
 
-async function snapshotPrices() {
+// Checks a single alert rule against a fresh quote. Returns true if
+// its condition is currently met — pure comparison logic, no side
+// effects, which makes it easy to test on its own.
+function alertConditionMet(alert, quote) {
+  const threshold = parseFloat(alert.threshold);
+  switch (alert.condition_type) {
+    case 'percent_drop': return quote.changePercent <= -threshold;
+    case 'percent_gain': return quote.changePercent >= threshold;
+    case 'price_above': return quote.price >= threshold;
+    case 'price_below': return quote.price <= threshold;
+    default: return false;
+  }
+}
+
+function describeAlert(alert) {
+  const t = parseFloat(alert.threshold);
+  switch (alert.condition_type) {
+    case 'percent_drop': return `dropped ${t}% or more today`;
+    case 'percent_gain': return `rose ${t}% or more today`;
+    case 'price_above': return `reached $${t.toFixed(2)} or higher`;
+    case 'price_below': return `fell to $${t.toFixed(2)} or lower`;
+    default: return 'met your alert condition';
+  }
+}
+
+// Sends one alert email via Resend's API — same fetch-based pattern
+// as every other external call in this app. If Resend isn't
+// configured, this quietly does nothing rather than erroring —
+// alerts still get created and evaluated, they just won't email
+// until both EMAIL_API_KEY and ALERT_EMAIL are set in Railway.
+async function sendAlertEmail(alert, quote) {
+  if (!process.env.EMAIL_API_KEY || !process.env.ALERT_EMAIL) return;
+
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.EMAIL_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: 'Stock Tracker <onboarding@resend.dev>',
+        to: [process.env.ALERT_EMAIL],
+        subject: `${alert.ticker} alert: ${describeAlert(alert)}`,
+        text: `${alert.ticker} is now $${quote.price.toFixed(2)} ` +
+          `(${quote.changePercent > 0 ? '+' : ''}${quote.changePercent.toFixed(2)}% today).\n\n` +
+          `This alert was set to notify you when it ${describeAlert(alert)}.`,
+      }),
+    });
+    console.log(`Sent alert email for ${alert.ticker}.`);
+  } catch (err) {
+    console.log('Failed to send alert email:', err.message);
+  }
+}
+
+// For one ticker's fresh quote, check every active alert rule that
+// watches it, and fire + update whichever ones are triggered.
+async function checkAlertsForTicker(ticker, quote) {
+  const { rows: activeAlerts } = await pool.query(
+    'SELECT * FROM alerts WHERE ticker = $1 AND active = true',
+    [ticker]
+  );
+
+  for (const alert of activeAlerts) {
+    if (!alertConditionMet(alert, quote)) continue;
+
+    const isOneTime = alert.condition_type === 'price_above' || alert.condition_type === 'price_below';
+
+    if (isOneTime) {
+      await sendAlertEmail(alert, quote);
+      await pool.query(
+        'UPDATE alerts SET active = false, last_triggered_at = NOW() WHERE id = $1',
+        [alert.id]
+      );
+    } else {
+      const cooledDown = !alert.last_triggered_at ||
+        (Date.now() - new Date(alert.last_triggered_at).getTime()) > ALERT_COOLDOWN_MS;
+      if (cooledDown) {
+        await sendAlertEmail(alert, quote);
+        await pool.query('UPDATE alerts SET last_triggered_at = NOW() WHERE id = $1', [alert.id]);
+      }
+    }
+  }
+}
+
+// ------------------------------------------------------------
+// runScheduledChecks() — runs every SNAPSHOT_INTERVAL_MS, on its
+// own, independent of anyone having the page open. For every
+// watchlist ticker it: fetches one fresh quote, stores it in
+// price_history (feeding the sparkline), and checks that same
+// quote against any alert rules for that ticker (feeding email
+// notifications) — one Finnhub call serving two features.
+// ------------------------------------------------------------
+async function runScheduledChecks() {
   if (!dbReady) return;
 
-  // Fetching new prices needs Finnhub. Cleaning up old ones doesn't —
-  // they're two separate concerns, so a Finnhub outage or missing key
-  // should never be able to silently stop the housekeeping below.
   if (process.env.FINNHUB_API_KEY) {
     try {
       const items = await getAllWatchlistItems();
@@ -382,11 +550,12 @@ async function snapshotPrices() {
             'INSERT INTO price_history (ticker, price) VALUES ($1, $2)',
             [item.ticker, quote.price]
           );
+          await checkAlertsForTicker(item.ticker, quote);
         }
       }
-      console.log(`Snapshotted prices for ${items.length} ticker(s).`);
+      console.log(`Checked ${items.length} ticker(s): snapshotted + evaluated alerts.`);
     } catch (err) {
-      console.log('Price snapshot failed:', err.message);
+      console.log('Scheduled check failed:', err.message);
     }
   }
 
@@ -476,5 +645,5 @@ initDb();   // fires immediately, retries quietly in the background
 // Take one snapshot shortly after startup, so charts have at least
 // one data point without waiting a full 15 minutes for the first
 // scheduled run. Then keep snapshotting on the regular interval.
-setTimeout(snapshotPrices, 8000);
-setInterval(snapshotPrices, SNAPSHOT_INTERVAL_MS);
+setTimeout(runScheduledChecks, 8000);
+setInterval(runScheduledChecks, SNAPSHOT_INTERVAL_MS);
