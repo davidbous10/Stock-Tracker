@@ -68,6 +68,15 @@ async function initDb(retries = 10, delayMs = 3000) {
         )
       `);
 
+      // MIGRATION: add a "name" column for company names (e.g. "Apple
+      // Inc."), needed for the redesigned UI. IF NOT EXISTS means this
+      // is safe to run every single startup — it only actually does
+      // anything the first time, then becomes a harmless no-op forever
+      // after. This is how real apps evolve their database shape over
+      // time without ever touching production data by hand.
+      await pool.query(`ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS name TEXT`);
+      await pool.query(`ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS logo TEXT`);
+
       const { rows } = await pool.query('SELECT COUNT(*) FROM watchlist');
       if (parseInt(rows[0].count, 10) === 0) {
         await pool.query(
@@ -94,10 +103,33 @@ async function initDb(retries = 10, delayMs = 3000) {
   }
 }
 
-// Small helper so every route doesn't repeat this same query
-async function getAllTickers() {
-  const { rows } = await pool.query('SELECT ticker FROM watchlist ORDER BY added_at ASC');
-  return rows.map(r => r.ticker);
+// Small helper so every route doesn't repeat this same query.
+// Returns [{ ticker, name }, ...] — name may be null for tickers
+// added before this column existed, or added by raw ticker typed
+// directly rather than picked from search.
+async function getAllWatchlistItems() {
+  const { rows } = await pool.query('SELECT ticker, name, logo FROM watchlist ORDER BY added_at ASC');
+  return rows;
+}
+
+// Looks up a company's logo (and canonical name) from Finnhub's free
+// company-profile endpoint. Used once, at the moment a ticker is
+// added — not on every price refresh, since a logo never changes.
+// If this fails for any reason (bad ticker, Finnhub hiccup), we
+// simply store no logo — the frontend falls back to a colored
+// initial badge, so nothing breaks.
+async function fetchCompanyProfile(ticker) {
+  try {
+    const url = `https://finnhub.io/api/v1/stock/profile2?symbol=${ticker}&token=${process.env.FINNHUB_API_KEY}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    return {
+      name: data && data.name ? data.name : null,
+      logo: data && data.logo ? data.logo : null,
+    };
+  } catch (err) {
+    return { name: null, logo: null };
+  }
 }
 
 // ------------------------------------------------------------
@@ -108,8 +140,8 @@ async function getAllTickers() {
 app.get('/api/watchlist', async (req, res) => {
   if (!requireDb(res)) return;
   try {
-    const tickers = await getAllTickers();
-    res.json({ tickers });
+    const items = await getAllWatchlistItems();
+    res.json({ items });
   } catch (err) {
     res.status(500).json({ error: 'Database error' });
   }
@@ -118,24 +150,33 @@ app.get('/api/watchlist', async (req, res) => {
 app.post('/api/watchlist', async (req, res) => {
   if (!requireDb(res)) return;
   const raw = (req.body.ticker || '').trim().toUpperCase();
+  const suppliedName = (req.body.name || '').trim() || null;
 
   if (!/^[A-Z]{1,6}(\.[A-Z])?$/.test(raw)) {
     return res.status(400).json({ error: 'Invalid ticker symbol' });
   }
 
+  // Look up the logo (and a canonical name as backup) once, right
+  // now, at add-time — not on every future price refresh.
+  const profile = process.env.FINNHUB_API_KEY
+    ? await fetchCompanyProfile(raw)
+    : { name: null, logo: null };
+  const name = suppliedName || profile.name;
+
   try {
-    await pool.query('INSERT INTO watchlist (ticker) VALUES ($1)', [raw]);
+    await pool.query(
+      'INSERT INTO watchlist (ticker, name, logo) VALUES ($1, $2, $3)',
+      [raw, name, profile.logo]
+    );
   } catch (err) {
-    // Postgres error code 23505 = "unique_violation" — our own
-    // UNIQUE constraint on the ticker column caught a duplicate.
     if (err.code === '23505') {
       return res.status(409).json({ error: raw + ' is already on the list' });
     }
     return res.status(500).json({ error: 'Database error' });
   }
 
-  const tickers = await getAllTickers();
-  res.json({ tickers });
+  const items = await getAllWatchlistItems();
+  res.json({ items });
 });
 
 app.delete('/api/watchlist/:ticker', async (req, res) => {
@@ -143,15 +184,16 @@ app.delete('/api/watchlist/:ticker', async (req, res) => {
   const target = req.params.ticker.toUpperCase();
   try {
     await pool.query('DELETE FROM watchlist WHERE ticker = $1', [target]);
-    const tickers = await getAllTickers();
-    res.json({ tickers });
+    const items = await getAllWatchlistItems();
+    res.json({ items });
   } catch (err) {
     res.status(500).json({ error: 'Database error' });
   }
 });
 
 // ------------------------------------------------------------
-// PRICES — now pulls the ticker list from the database first
+// PRICES — now also captures day high/low/open, needed for the
+// day-range bar in the redesigned UI.
 // ------------------------------------------------------------
 const FINNHUB_QUOTE_URL = 'https://finnhub.io/api/v1/quote';
 
@@ -165,7 +207,15 @@ async function fetchQuote(ticker) {
       return { ticker, error: 'No data found' };
     }
 
-    return { ticker, price: data.c, change: data.d, changePercent: data.dp };
+    return {
+      ticker,
+      price: data.c,
+      change: data.d,
+      changePercent: data.dp,
+      dayHigh: data.h,
+      dayLow: data.l,
+      dayOpen: data.o,
+    };
   } catch (err) {
     return { ticker, error: 'Failed to fetch' };
   }
@@ -178,8 +228,8 @@ app.get('/api/prices', async (req, res) => {
   }
 
   try {
-    const tickers = await getAllTickers();
-    const quotes = await Promise.all(tickers.map(ticker => fetchQuote(ticker)));
+    const items = await getAllWatchlistItems();
+    const quotes = await Promise.all(items.map(item => fetchQuote(item.ticker)));
     res.json({ quotes });
   } catch (err) {
     res.status(500).json({ error: 'Database error' });
