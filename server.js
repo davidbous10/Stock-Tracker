@@ -13,6 +13,15 @@ const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 
 const app = express();
+
+// REQUIRED when running behind any reverse proxy (which Railway
+// always is — your browser talks to Railway's edge, which then
+// forwards the request to our server). Without this, Express can't
+// correctly tell the connection is HTTPS, which breaks "secure"
+// cookies like our login session — they'd get set on signup, but
+// silently fail to be sent back on the very next request. This one
+// line is the documented fix.
+app.set('trust proxy', 1);
 app.use(express.json());
 
 const isLocal = !process.env.DATABASE_URL || process.env.DATABASE_URL.includes('localhost');
