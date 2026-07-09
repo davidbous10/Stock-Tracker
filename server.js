@@ -30,6 +30,20 @@ const pool = new Pool({
   ssl: isLocal ? false : { rejectUnauthorized: false },
 });
 
+// Tracks whether the database has finished connecting. Routes
+// that need the database check this first, so a request arriving
+// during the brief startup window gets a clean "still starting"
+// message instead of hanging or erroring strangely.
+let dbReady = false;
+
+function requireDb(res) {
+  if (!dbReady) {
+    res.status(503).json({ error: 'Database is still starting up — try again in a few seconds' });
+    return false;
+  }
+  return true;
+}
+
 // ------------------------------------------------------------
 // initDb() — runs once when the server starts.
 // CREATE TABLE IF NOT EXISTS means: make the table if it's
@@ -63,10 +77,18 @@ async function initDb(retries = 10, delayMs = 3000) {
       }
 
       console.log('Database connected and ready.');
+      dbReady = true;
       return;   // success — stop retrying
     } catch (err) {
       console.log(`Database not ready yet (attempt ${attempt}/${retries}): ${err.message}`);
-      if (attempt === retries) throw err;   // out of attempts — give up for real
+      if (attempt === retries) {
+        // Out of attempts. Don't crash the whole process — just
+        // leave dbReady false. The health check and every DB
+        // route will keep reporting "not ready" instead of the
+        // entire site going dark.
+        console.error('Giving up on database connection after all retries.');
+        return;
+      }
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
@@ -84,6 +106,7 @@ async function getAllTickers() {
 // ------------------------------------------------------------
 
 app.get('/api/watchlist', async (req, res) => {
+  if (!requireDb(res)) return;
   try {
     const tickers = await getAllTickers();
     res.json({ tickers });
@@ -93,6 +116,7 @@ app.get('/api/watchlist', async (req, res) => {
 });
 
 app.post('/api/watchlist', async (req, res) => {
+  if (!requireDb(res)) return;
   const raw = (req.body.ticker || '').trim().toUpperCase();
 
   if (!/^[A-Z]{1,6}(\.[A-Z])?$/.test(raw)) {
@@ -115,6 +139,7 @@ app.post('/api/watchlist', async (req, res) => {
 });
 
 app.delete('/api/watchlist/:ticker', async (req, res) => {
+  if (!requireDb(res)) return;
   const target = req.params.ticker.toUpperCase();
   try {
     await pool.query('DELETE FROM watchlist WHERE ticker = $1', [target]);
@@ -147,6 +172,7 @@ async function fetchQuote(ticker) {
 }
 
 app.get('/api/prices', async (req, res) => {
+  if (!requireDb(res)) return;
   if (!process.env.FINNHUB_API_KEY) {
     return res.status(500).json({ error: 'Server is missing FINNHUB_API_KEY' });
   }
@@ -210,20 +236,26 @@ app.get('/api/health', async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// STARTUP — we now wait for the database to be ready (table
-// created) BEFORE accepting any traffic, avoiding a race where
-// the very first request arrives before the table exists.
+// STARTUP — the key fix.
+//
+// Previously we made app.listen() WAIT for the database to be
+// fully ready first. That backfired: while retrying a slow
+// database connection (up to 30 seconds), the server wasn't
+// listening on its port at all, and Railway's proxy showed
+// "Application failed to respond" — because nothing was there
+// to respond.
+//
+// The correct pattern: start listening immediately, so the app
+// is always reachable. Run the database connection separately,
+// in the background. Any request that needs the database before
+// it's ready gets a clean 503 "still starting up" message
+// (handled by requireDb above), instead of the whole site
+// appearing broken.
 // ------------------------------------------------------------
 const PORT = process.env.PORT || 3000;
 
-async function start() {
-  await initDb();
-  app.listen(PORT, () => {
-    console.log(`Stock tracker running on port ${PORT}`);
-  });
-}
-
-start().catch(err => {
-  console.error('Failed to start server:', err);
-  process.exit(1);
+app.listen(PORT, () => {
+  console.log(`Stock tracker running on port ${PORT}`);
 });
+
+initDb();   // fires immediately, retries quietly in the background
