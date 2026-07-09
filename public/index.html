@@ -216,6 +216,21 @@
     .card.dir-up { border-left-color: var(--up); }
     .card.dir-down { border-left-color: var(--down); }
 
+    .card.dragging { opacity: 0.35; }
+    .card.drag-over-top { box-shadow: inset 0 2px 0 var(--accent); }
+    .card.drag-over-bottom { box-shadow: inset 0 -2px 0 var(--accent); }
+
+    .drag-handle {
+      display: flex;
+      align-items: center;
+      color: var(--text-faint);
+      cursor: grab;
+      flex-shrink: 0;
+      touch-action: none;
+    }
+    .drag-handle:active { cursor: grabbing; }
+    .card:hover .drag-handle { color: var(--text-muted); }
+
     /* Logo / avatar */
     .avatar {
       width: 40px;
@@ -477,6 +492,17 @@
       `;
     }
 
+    // A small grip icon so people notice cards are draggable, without
+    // needing to explain it in words.
+    const DRAG_HANDLE = `
+      <span class="drag-handle" title="Drag to reorder">
+        <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
+          <circle cx="2" cy="2" r="1.4"/><circle cx="8" cy="2" r="1.4"/>
+          <circle cx="2" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/>
+          <circle cx="2" cy="14" r="1.4"/><circle cx="8" cy="14" r="1.4"/>
+        </svg>
+      </span>`;
+
     function cardHtml(item) {
       const q = quotesByTicker[item.ticker];
       const nameHtml = item.name ? `<div class="company-name">${esc(item.name)}</div>` : '';
@@ -484,7 +510,8 @@
 
       if (!q) {
         return `
-          <div class="card">
+          <div class="card" draggable="true" data-ticker="${esc(item.ticker)}">
+            ${DRAG_HANDLE}
             ${avatarHtml(item)}
             <div class="card-body">
               <div class="card-top">
@@ -509,7 +536,8 @@
 
       if (q.error) {
         return `
-          <div class="card">
+          <div class="card" draggable="true" data-ticker="${esc(item.ticker)}">
+            ${DRAG_HANDLE}
             ${avatarHtml(item)}
             <div class="card-body">
               <div class="card-top">
@@ -530,7 +558,8 @@
       const sign = q.changePercent > 0 ? '+' : '';
 
       return `
-        <div class="card ${dirClass}">
+        <div class="card ${dirClass}" draggable="true" data-ticker="${esc(item.ticker)}">
+          ${DRAG_HANDLE}
           ${avatarHtml(item)}
           <div class="card-body">
             <div class="card-top">
@@ -704,6 +733,89 @@
       const btn = e.target.closest('.btn-remove');
       if (btn) removeTicker(btn.dataset.ticker);
     });
+
+    // ---- DRAG-AND-DROP REORDERING ----
+    // Uses the browser's native drag-and-drop, not a library. Key
+    // design choice: we only touch the DOM (via render()) on 'drop',
+    // never during 'dragover'. Re-rendering mid-drag would destroy
+    // the very element the browser is tracking as "being dragged"
+    // and silently cancel the whole gesture — a classic native-DnD
+    // gotcha. During 'dragover' we only toggle CSS classes for the
+    // visual indicator line, which is safe to do repeatedly.
+    let draggedTicker = null;
+
+    listEl.addEventListener('dragstart', e => {
+      const card = e.target.closest('.card');
+      if (!card) return;
+      draggedTicker = card.dataset.ticker;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', draggedTicker);   // required by Firefox
+    });
+
+    listEl.addEventListener('dragend', e => {
+      const card = e.target.closest('.card');
+      if (card) card.classList.remove('dragging');
+      listEl.querySelectorAll('.card').forEach(c =>
+        c.classList.remove('drag-over-top', 'drag-over-bottom')
+      );
+      draggedTicker = null;
+    });
+
+    listEl.addEventListener('dragover', e => {
+      const card = e.target.closest('.card');
+      if (!card || !draggedTicker || card.dataset.ticker === draggedTicker) return;
+      e.preventDefault();   // required — tells the browser "yes, a drop is allowed here"
+
+      // Which half of the target card is the cursor over? That decides
+      // whether the dragged card would land above or below it.
+      const rect = card.getBoundingClientRect();
+      const isAfter = e.clientY > rect.top + rect.height / 2;
+
+      listEl.querySelectorAll('.card').forEach(c =>
+        c.classList.remove('drag-over-top', 'drag-over-bottom')
+      );
+      card.classList.add(isAfter ? 'drag-over-bottom' : 'drag-over-top');
+    });
+
+    listEl.addEventListener('drop', e => {
+      const card = e.target.closest('.card');
+      listEl.querySelectorAll('.card').forEach(c =>
+        c.classList.remove('drag-over-top', 'drag-over-bottom')
+      );
+      if (!card || !draggedTicker) return;
+      e.preventDefault();
+
+      const targetTicker = card.dataset.ticker;
+      if (targetTicker === draggedTicker) return;
+
+      const draggedIndex = items.findIndex(i => i.ticker === draggedTicker);
+      if (draggedIndex === -1) return;
+
+      const [moved] = items.splice(draggedIndex, 1);
+
+      const rect = card.getBoundingClientRect();
+      const isAfter = e.clientY > rect.top + rect.height / 2;
+      const targetIndex = items.findIndex(i => i.ticker === targetTicker);
+      items.splice(isAfter ? targetIndex + 1 : targetIndex, 0, moved);
+
+      render();       // safe now — the drag gesture has already ended
+      saveOrder();    // persist the new order to the database
+    });
+
+    async function saveOrder() {
+      try {
+        await fetch('/api/watchlist/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order: items.map(i => i.ticker) })
+        });
+      } catch (err) {
+        // If this fails, the on-screen order and the saved order
+        // briefly disagree. loadWatchlist() on the next refresh
+        // corrects it, so we don't need to handle this loudly.
+      }
+    }
 
     loadWatchlist();
     setInterval(loadPrices, 30000);
