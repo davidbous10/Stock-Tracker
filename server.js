@@ -1,28 +1,20 @@
 // ============================================================
 // STOCK TRACKER — server.js
-// Phase 2: real persistence with PostgreSQL.
-// The in-memory "let watchlist = [...]" array is GONE. Every
-// watchlist route now reads from / writes to a real database,
-// so the list survives restarts, redeploys, everything.
+// Phase 3: user accounts. Every watchlist and every alert now
+// belongs to a specific logged-in person, instead of one shared
+// list for whoever visits the URL.
 // ============================================================
 
 const express = require('express');
 const path = require('path');
-const { Pool } = require('pg');   // the Postgres library
+const { Pool } = require('pg');
+const bcrypt = require('bcryptjs');
+const session = require('express-session');
+const pgSession = require('connect-pg-simple')(session);
 
 const app = express();
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 
-// ------------------------------------------------------------
-// DATABASE CONNECTION
-// A "Pool" manages a small set of reusable connections to
-// Postgres, rather than opening a brand new one for every
-// request (which would be slow). connectionString comes from
-// the DATABASE_URL environment variable — on Railway that's a
-// reference to the Postgres service; locally, we point it at
-// our own test database.
-// ------------------------------------------------------------
 const isLocal = !process.env.DATABASE_URL || process.env.DATABASE_URL.includes('localhost');
 
 const pool = new Pool({
@@ -30,10 +22,6 @@ const pool = new Pool({
   ssl: isLocal ? false : { rejectUnauthorized: false },
 });
 
-// Tracks whether the database has finished connecting. Routes
-// that need the database check this first, so a request arriving
-// during the brief startup window gets a clean "still starting"
-// message instead of hanging or erroring strangely.
 let dbReady = false;
 
 function requireDb(res) {
@@ -45,49 +33,96 @@ function requireDb(res) {
 }
 
 // ------------------------------------------------------------
-// initDb() — runs once when the server starts.
-// CREATE TABLE IF NOT EXISTS means: make the table if it's
-// missing, do nothing if it's already there. This is why we
-// never had to click "Create table" in Railway's UI — the code
-// sets up its own schema, every time, on every environment.
+// SESSIONS — how the server remembers "you're logged in" between
+// requests. connect-pg-simple stores session data in Postgres
+// (in its own auto-created "session" table), so — same principle
+// as everything else in this app — a restart doesn't log everyone
+// out. The browser holds only a small signed cookie that points
+// at that stored session; it never contains the password or
+// anything sensitive itself.
 // ------------------------------------------------------------
-// Retries connecting up to `retries` times, waiting `delayMs`
-// between attempts. This protects us from a very real timing
-// issue: on a redeploy, Postgres and our server can both restart
-// around the same moment, and Postgres may need a few extra
-// seconds to be ready. Without a retry, our server gives up on
-// the very first attempt and crashes. With it, we patiently wait.
+app.use(session({
+  store: new pgSession({ pool, tableName: 'session', createTableIfMissing: true }),
+  secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    maxAge: 30 * 24 * 60 * 60 * 1000,   // 30 days
+    httpOnly: true,                     // JavaScript can't read this cookie — blocks a common attack
+    secure: !isLocal,                   // HTTPS-only in production; Railway terminates HTTPS for us
+    sameSite: 'lax',
+  },
+}));
+
+// Serve static files AFTER session middleware, so cookies are
+// available to every request, static or not.
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Any route wrapped with this must have a logged-in user, or it
+// short-circuits with 401 before the route's own code ever runs.
+function requireAuth(req, res, next) {
+  if (!req.session || !req.session.userId) {
+    return res.status(401).json({ error: 'Please log in' });
+  }
+  next();
+}
+
+// ------------------------------------------------------------
+// initDb() — schema setup and migrations, same retry pattern as
+// before. New this phase: a "users" table, a user_id column on
+// both watchlist and alerts, and a corrected UNIQUE constraint —
+// tickers must now be unique PER USER, not globally (two different
+// people both watching AAPL is normal, not a conflict).
+// ------------------------------------------------------------
 async function initDb(retries = 10, delayMs = 3000) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       await pool.query(`
         CREATE TABLE IF NOT EXISTS watchlist (
           id SERIAL PRIMARY KEY,
-          ticker TEXT UNIQUE NOT NULL,
+          ticker TEXT NOT NULL,
           added_at TIMESTAMP DEFAULT NOW()
         )
       `);
-
-      // MIGRATION: add a "name" column for company names (e.g. "Apple
-      // Inc."), needed for the redesigned UI. IF NOT EXISTS means this
-      // is safe to run every single startup — it only actually does
-      // anything the first time, then becomes a harmless no-op forever
-      // after. This is how real apps evolve their database shape over
-      // time without ever touching production data by hand.
       await pool.query(`ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS name TEXT`);
       await pool.query(`ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS logo TEXT`);
-
-      // MIGRATION: add a "sort_order" column so drag-and-drop reordering
-      // has somewhere to live. For rows that already exist (added before
-      // this feature), backfill their sort_order from their original
-      // added_at order — so nothing visually jumps around the first
-      // time this deploys. New tickers get their sort_order set
-      // explicitly when inserted (see the POST route below).
       await pool.query(`ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS sort_order INTEGER`);
       await pool.query(`
         UPDATE watchlist SET sort_order = sub.rn
         FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY added_at ASC) AS rn FROM watchlist) sub
         WHERE watchlist.id = sub.id AND watchlist.sort_order IS NULL
+      `);
+
+      // ---- USERS ----
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          email TEXT UNIQUE NOT NULL,
+          password_hash TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+
+      // MIGRATION: give watchlist and alerts an owner. Existing rows
+      // (created back when there was only ever one shared list) get
+      // user_id = NULL for now — the very first person to sign up
+      // automatically inherits them, handled in the /signup route.
+      await pool.query(`ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)`);
+
+      // MIGRATION: the old rule was "no duplicate ticker, period."
+      // The correct rule now is "no duplicate ticker for the SAME
+      // user" — otherwise a second person could never add AAPL just
+      // because someone else already has it on their own list.
+      await pool.query(`ALTER TABLE watchlist DROP CONSTRAINT IF EXISTS watchlist_ticker_key`);
+      await pool.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'watchlist_user_ticker_unique'
+          ) THEN
+            ALTER TABLE watchlist ADD CONSTRAINT watchlist_user_ticker_unique UNIQUE (user_id, ticker);
+          END IF;
+        END $$;
       `);
 
       const { rows } = await pool.query('SELECT COUNT(*) FROM watchlist');
@@ -98,11 +133,6 @@ async function initDb(retries = 10, delayMs = 3000) {
         );
       }
 
-      // A brand new table for historical price points, one row per
-      // (ticker, moment we checked). This is a DIFFERENT table from
-      // "watchlist" on purpose — watchlist is "what you're tracking",
-      // price_history is "what we've observed over time" for those
-      // tickers. Keeping them separate keeps each table's job simple.
       await pool.query(`
         CREATE TABLE IF NOT EXISTS price_history (
           id SERIAL PRIMARY KEY,
@@ -111,22 +141,11 @@ async function initDb(retries = 10, delayMs = 3000) {
           recorded_at TIMESTAMP DEFAULT NOW()
         )
       `);
-      // An index makes "give me all the points for ticker X, in order"
-      // fast even once this table has thousands of rows — without it,
-      // Postgres would have to scan the entire table every single time.
       await pool.query(`
         CREATE INDEX IF NOT EXISTS idx_price_history_ticker_time
         ON price_history (ticker, recorded_at)
       `);
 
-      // Alert rules. condition_type is one of:
-      //   percent_drop / percent_gain — checked against today's % move,
-      //     allowed to refire once every 24h (the underlying % change
-      //     itself resets daily, so this pairs naturally)
-      //   price_above / price_below — a fixed dollar threshold, fires
-      //     once and then auto-deactivates (active = false), since a
-      //     stock parked above/below a price for weeks shouldn't email
-      //     you daily about it
       await pool.query(`
         CREATE TABLE IF NOT EXISTS alerts (
           id SERIAL PRIMARY KEY,
@@ -138,17 +157,16 @@ async function initDb(retries = 10, delayMs = 3000) {
           created_at TIMESTAMP DEFAULT NOW()
         )
       `);
+      // This can only run now that both "alerts" and "users" definitely
+      // exist — ordering matters for ALTER TABLE ... REFERENCES.
+      await pool.query(`ALTER TABLE alerts ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)`);
 
       console.log('Database connected and ready.');
       dbReady = true;
-      return;   // success — stop retrying
+      return;
     } catch (err) {
-      console.log(`Database not ready yet (attempt ${attempt}/${retries}): code=${err.code} message=${err.message} address=${err.address} port=${err.port} host=${err.hostname || ''}`);
+      console.log(`Database not ready yet (attempt ${attempt}/${retries}): code=${err.code} message=${err.message}`);
       if (attempt === retries) {
-        // Out of attempts. Don't crash the whole process — just
-        // leave dbReady false. The health check and every DB
-        // route will keep reporting "not ready" instead of the
-        // entire site going dark.
         console.error('Giving up on database connection after all retries.');
         return;
       }
@@ -157,21 +175,14 @@ async function initDb(retries = 10, delayMs = 3000) {
   }
 }
 
-// Small helper so every route doesn't repeat this same query.
-// Returns [{ ticker, name }, ...] — name may be null for tickers
-// added before this column existed, or added by raw ticker typed
-// directly rather than picked from search.
-async function getAllWatchlistItems() {
-  const { rows } = await pool.query('SELECT ticker, name, logo, sort_order FROM watchlist ORDER BY sort_order ASC');
+async function getAllWatchlistItems(userId) {
+  const { rows } = await pool.query(
+    'SELECT ticker, name, logo, sort_order FROM watchlist WHERE user_id = $1 ORDER BY sort_order ASC',
+    [userId]
+  );
   return rows;
 }
 
-// Looks up a company's logo (and canonical name) from Finnhub's free
-// company-profile endpoint. Used once, at the moment a ticker is
-// added — not on every price refresh, since a logo never changes.
-// If this fails for any reason (bad ticker, Finnhub hiccup), we
-// simply store no logo — the frontend falls back to a colored
-// initial badge, so nothing breaks.
 async function fetchCompanyProfile(ticker) {
   try {
     const url = `https://finnhub.io/api/v1/stock/profile2?symbol=${ticker}&token=${process.env.FINNHUB_API_KEY}`;
@@ -187,21 +198,126 @@ async function fetchCompanyProfile(ticker) {
 }
 
 // ------------------------------------------------------------
-// WATCHLIST ROUTES — same URLs and behavior as before, but now
-// every handler is async and talks to Postgres instead of an array.
+// AUTH ROUTES
+// ------------------------------------------------------------
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+app.post('/api/auth/signup', async (req, res) => {
+  if (!requireDb(res)) return;
+
+  const email = (req.body.email || '').trim().toLowerCase();
+  const password = req.body.password || '';
+
+  if (!EMAIL_PATTERN.test(email)) {
+    return res.status(400).json({ error: 'Please enter a valid email address' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+
+  try {
+    // Hashing turns the password into a one-way scrambled string —
+    // we never store (or could even recover) the actual password.
+    // The "10" is the cost factor: how many times to scramble. Higher
+    // is slower but harder to brute-force; 10 is a solid default.
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const { rows } = await pool.query(
+      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id',
+      [email, passwordHash]
+    );
+    const userId = rows[0].id;
+
+    const { rows: countRows } = await pool.query('SELECT COUNT(*) FROM users');
+    const isFirstUserEver = parseInt(countRows[0].count, 10) === 1;
+
+    if (isFirstUserEver) {
+      // Whoever signs up first inherits whatever was on the shared
+      // list before accounts existed — nobody's existing data
+      // vanishes just because login now exists.
+      await pool.query('UPDATE watchlist SET user_id = $1 WHERE user_id IS NULL', [userId]);
+      await pool.query('UPDATE alerts SET user_id = $1 WHERE user_id IS NULL', [userId]);
+    } else {
+      // Everyone after that starts fresh with a small starter list.
+      await pool.query(
+        `INSERT INTO watchlist (ticker, sort_order, user_id) VALUES ($1, 0, $3), ($2, 1, $3)`,
+        ['AAPL', 'NVDA', userId]
+      );
+    }
+
+    req.session.userId = userId;
+    req.session.userEmail = email;
+    res.json({ email });
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'An account with that email already exists' });
+    }
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  if (!requireDb(res)) return;
+
+  const email = (req.body.email || '').trim().toLowerCase();
+  const password = req.body.password || '';
+
+  try {
+    const { rows } = await pool.query('SELECT id, password_hash FROM users WHERE email = $1', [email]);
+
+    // Deliberately the SAME error message whether the email doesn't
+    // exist or the password is wrong. Being specific ("no account
+    // with that email") would let an attacker discover which emails
+    // have accounts here just by trying them — a real, well-known
+    // security leak called a "user enumeration" bug.
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    const match = await bcrypt.compare(password, rows[0].password_hash);
+    if (!match) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    req.session.userId = rows[0].id;
+    req.session.userEmail = email;
+    res.json({ email });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.clearCookie('connect.sid');
+    res.json({ ok: true });
+  });
+});
+
+app.get('/api/auth/me', (req, res) => {
+  if (!req.session || !req.session.userId) {
+    return res.status(401).json({ error: 'Not logged in' });
+  }
+  res.json({ email: req.session.userEmail });
+});
+
+// ------------------------------------------------------------
+// WATCHLIST ROUTES — every one now requires login, and every
+// query is scoped to req.session.userId, so what you see is only
+// ever your own list.
 // ------------------------------------------------------------
 
-app.get('/api/watchlist', async (req, res) => {
+app.get('/api/watchlist', requireAuth, async (req, res) => {
   if (!requireDb(res)) return;
   try {
-    const items = await getAllWatchlistItems();
+    const items = await getAllWatchlistItems(req.session.userId);
     res.json({ items });
   } catch (err) {
     res.status(500).json({ error: 'Database error' });
   }
 });
 
-app.post('/api/watchlist', async (req, res) => {
+app.post('/api/watchlist', requireAuth, async (req, res) => {
   if (!requireDb(res)) return;
   const raw = (req.body.ticker || '').trim().toUpperCase();
   const suppliedName = (req.body.name || '').trim() || null;
@@ -210,61 +326,45 @@ app.post('/api/watchlist', async (req, res) => {
     return res.status(400).json({ error: 'Invalid ticker symbol' });
   }
 
-  // Look up the logo (and a canonical name as backup) once, right
-  // now, at add-time — not on every future price refresh.
   const profile = process.env.FINNHUB_API_KEY
     ? await fetchCompanyProfile(raw)
     : { name: null, logo: null };
   const name = suppliedName || profile.name;
+  const userId = req.session.userId;
 
   try {
-    // New tickers land at the end of the list: their sort_order is
-    // one more than the current highest. COALESCE handles the very
-    // first insert ever, when MAX(sort_order) is NULL (empty table).
     await pool.query(
-      `INSERT INTO watchlist (ticker, name, logo, sort_order)
-       VALUES ($1, $2, $3, COALESCE((SELECT MAX(sort_order) FROM watchlist), 0) + 1)`,
-      [raw, name, profile.logo]
+      `INSERT INTO watchlist (ticker, name, logo, sort_order, user_id)
+       VALUES ($1, $2, $3, COALESCE((SELECT MAX(sort_order) FROM watchlist WHERE user_id = $4), 0) + 1, $4)`,
+      [raw, name, profile.logo, userId]
     );
   } catch (err) {
     if (err.code === '23505') {
-      return res.status(409).json({ error: raw + ' is already on the list' });
+      return res.status(409).json({ error: raw + ' is already on your list' });
     }
     return res.status(500).json({ error: 'Database error' });
   }
 
-  const items = await getAllWatchlistItems();
+  const items = await getAllWatchlistItems(userId);
   res.json({ items });
 });
 
-app.delete('/api/watchlist/:ticker', async (req, res) => {
+app.delete('/api/watchlist/:ticker', requireAuth, async (req, res) => {
   if (!requireDb(res)) return;
   const target = req.params.ticker.toUpperCase();
   try {
-    await pool.query('DELETE FROM watchlist WHERE ticker = $1', [target]);
-    const items = await getAllWatchlistItems();
+    await pool.query('DELETE FROM watchlist WHERE ticker = $1 AND user_id = $2', [target, req.session.userId]);
+    const items = await getAllWatchlistItems(req.session.userId);
     res.json({ items });
   } catch (err) {
     res.status(500).json({ error: 'Database error' });
   }
 });
 
-// ------------------------------------------------------------
-// ROUTE: POST /api/watchlist/reorder
-// Takes the full new ticker order as an array, e.g.
-// { order: ["NVDA", "AAPL", "GOOG"] }, and rewrites every row's
-// sort_order to match its position in that array.
-//
-// This uses a TRANSACTION: pool.connect() checks out one dedicated
-// connection, BEGIN starts it, and every UPDATE inside either all
-// succeed together (COMMIT) or all get undone together (ROLLBACK)
-// if anything fails partway through. Without this, a crash halfway
-// through updating 5 rows could leave your watchlist in a broken,
-// half-reordered state. With it, reordering is all-or-nothing.
-// ------------------------------------------------------------
-app.post('/api/watchlist/reorder', async (req, res) => {
+app.post('/api/watchlist/reorder', requireAuth, async (req, res) => {
   if (!requireDb(res)) return;
   const order = req.body.order;
+  const userId = req.session.userId;
 
   if (!Array.isArray(order) || order.length === 0) {
     return res.status(400).json({ error: 'order must be a non-empty array of tickers' });
@@ -275,8 +375,8 @@ app.post('/api/watchlist/reorder', async (req, res) => {
     await client.query('BEGIN');
     for (let i = 0; i < order.length; i++) {
       await client.query(
-        'UPDATE watchlist SET sort_order = $1 WHERE ticker = $2',
-        [i, String(order[i]).toUpperCase()]
+        'UPDATE watchlist SET sort_order = $1 WHERE ticker = $2 AND user_id = $3',
+        [i, String(order[i]).toUpperCase(), userId]
       );
     }
     await client.query('COMMIT');
@@ -284,16 +384,15 @@ app.post('/api/watchlist/reorder', async (req, res) => {
     await client.query('ROLLBACK');
     return res.status(500).json({ error: 'Database error' });
   } finally {
-    client.release();   // always return the connection to the pool
+    client.release();
   }
 
-  const items = await getAllWatchlistItems();
+  const items = await getAllWatchlistItems(userId);
   res.json({ items });
 });
 
 // ------------------------------------------------------------
-// PRICES — now also captures day high/low/open, needed for the
-// day-range bar in the redesigned UI.
+// PRICES
 // ------------------------------------------------------------
 const FINNHUB_QUOTE_URL = 'https://finnhub.io/api/v1/quote';
 
@@ -321,14 +420,14 @@ async function fetchQuote(ticker) {
   }
 }
 
-app.get('/api/prices', async (req, res) => {
+app.get('/api/prices', requireAuth, async (req, res) => {
   if (!requireDb(res)) return;
   if (!process.env.FINNHUB_API_KEY) {
     return res.status(500).json({ error: 'Server is missing FINNHUB_API_KEY' });
   }
 
   try {
-    const items = await getAllWatchlistItems();
+    const items = await getAllWatchlistItems(req.session.userId);
     const quotes = await Promise.all(items.map(item => fetchQuote(item.ticker)));
     res.json({ quotes });
   } catch (err) {
@@ -337,17 +436,17 @@ app.get('/api/prices', async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// ROUTE: GET /api/history
-// Returns every stored price point for every ticker currently on
-// the watchlist, grouped by ticker, oldest first — exactly what a
-// sparkline needs to draw a trend line. One request covers the
-// whole list, same pattern as /api/prices.
+// HISTORY — price_history itself stays a SHARED table (a price
+// snapshot for AAPL at a given moment is the same fact regardless
+// of who's watching it — no reason to duplicate that data per
+// user). Only the "which tickers do I care about" part is scoped
+// to the logged-in user.
 // ------------------------------------------------------------
-app.get('/api/history', async (req, res) => {
+app.get('/api/history', requireAuth, async (req, res) => {
   if (!requireDb(res)) return;
 
   try {
-    const items = await getAllWatchlistItems();
+    const items = await getAllWatchlistItems(req.session.userId);
     const tickers = items.map(i => i.ticker);
 
     if (tickers.length === 0) {
@@ -359,8 +458,6 @@ app.get('/api/history', async (req, res) => {
       [tickers]
     );
 
-    // Build { AAPL: [{price, recorded_at}, ...], NVDA: [...] } so the
-    // frontend can look up each card's points by ticker directly.
     const history = {};
     tickers.forEach(t => { history[t] = []; });
     rows.forEach(r => {
@@ -374,28 +471,30 @@ app.get('/api/history', async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// ALERT ROUTES — create, list, and delete alert rules. The actual
-// checking and emailing happens in runScheduledChecks() below,
-// not here — these routes only manage the rules themselves.
+// ALERT ROUTES — scoped to the logged-in user, same pattern.
 // ------------------------------------------------------------
 const VALID_ALERT_TYPES = ['percent_drop', 'percent_gain', 'price_above', 'price_below'];
 
-app.get('/api/alerts', async (req, res) => {
+app.get('/api/alerts', requireAuth, async (req, res) => {
   if (!requireDb(res)) return;
   try {
-    const { rows } = await pool.query('SELECT * FROM alerts ORDER BY created_at DESC');
+    const { rows } = await pool.query(
+      'SELECT * FROM alerts WHERE user_id = $1 ORDER BY created_at DESC',
+      [req.session.userId]
+    );
     res.json({ alerts: rows });
   } catch (err) {
     res.status(500).json({ error: 'Database error' });
   }
 });
 
-app.post('/api/alerts', async (req, res) => {
+app.post('/api/alerts', requireAuth, async (req, res) => {
   if (!requireDb(res)) return;
 
   const ticker = (req.body.ticker || '').trim().toUpperCase();
   const conditionType = req.body.conditionType;
   const threshold = parseFloat(req.body.threshold);
+  const userId = req.session.userId;
 
   if (!/^[A-Z]{1,6}(\.[A-Z])?$/.test(ticker)) {
     return res.status(400).json({ error: 'Invalid ticker symbol' });
@@ -409,21 +508,26 @@ app.post('/api/alerts', async (req, res) => {
 
   try {
     await pool.query(
-      'INSERT INTO alerts (ticker, condition_type, threshold) VALUES ($1, $2, $3)',
-      [ticker, conditionType, threshold]
+      'INSERT INTO alerts (ticker, condition_type, threshold, user_id) VALUES ($1, $2, $3, $4)',
+      [ticker, conditionType, threshold, userId]
     );
-    const { rows } = await pool.query('SELECT * FROM alerts ORDER BY created_at DESC');
+    const { rows } = await pool.query('SELECT * FROM alerts WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
     res.json({ alerts: rows });
   } catch (err) {
     res.status(500).json({ error: 'Database error' });
   }
 });
 
-app.delete('/api/alerts/:id', async (req, res) => {
+app.delete('/api/alerts/:id', requireAuth, async (req, res) => {
   if (!requireDb(res)) return;
+  const userId = req.session.userId;
   try {
-    await pool.query('DELETE FROM alerts WHERE id = $1', [req.params.id]);
-    const { rows } = await pool.query('SELECT * FROM alerts ORDER BY created_at DESC');
+    // The "AND user_id = $2" here matters a lot: without it, anyone
+    // logged in could delete anyone else's alert just by guessing
+    // its id. This is the same scoping principle as every other
+    // route, just easy to forget on a delete-by-id route specifically.
+    await pool.query('DELETE FROM alerts WHERE id = $1 AND user_id = $2', [req.params.id, userId]);
+    const { rows } = await pool.query('SELECT * FROM alerts WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
     res.json({ alerts: rows });
   } catch (err) {
     res.status(500).json({ error: 'Database error' });
@@ -431,22 +535,12 @@ app.delete('/api/alerts/:id', async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// SCHEDULED SNAPSHOTS — the first piece of the app that runs on
-// its own, independent of anyone having the page open.
-//
-// Every SNAPSHOT_INTERVAL_MS, we record the current price of every
-// watchlist ticker into price_history. Over hours and days, this
-// naturally builds up the trend line the sparkline draws — Finnhub's
-// free tier doesn't give us historical data directly, so we're
-// generating our own by simply checking regularly and remembering.
+// SCHEDULED CHECKS
 // ------------------------------------------------------------
-const SNAPSHOT_INTERVAL_MS = 15 * 60 * 1000;   // 15 minutes
+const SNAPSHOT_INTERVAL_MS = 15 * 60 * 1000;
 const HISTORY_RETENTION_DAYS = 7;
-const ALERT_COOLDOWN_MS = 24 * 60 * 60 * 1000;   // 24 hours
+const ALERT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
-// Checks a single alert rule against a fresh quote. Returns true if
-// its condition is currently met — pure comparison logic, no side
-// effects, which makes it easy to test on its own.
 function alertConditionMet(alert, quote) {
   const threshold = parseFloat(alert.threshold);
   switch (alert.condition_type) {
@@ -469,13 +563,10 @@ function describeAlert(alert) {
   }
 }
 
-// Sends one alert email via Resend's API — same fetch-based pattern
-// as every other external call in this app. If Resend isn't
-// configured, this quietly does nothing rather than erroring —
-// alerts still get created and evaluated, they just won't email
-// until both EMAIL_API_KEY and ALERT_EMAIL are set in Railway.
+// Now emails whichever user owns the alert, not a single hardcoded
+// address — each person gets notified at their own signup email.
 async function sendAlertEmail(alert, quote) {
-  if (!process.env.EMAIL_API_KEY || !process.env.ALERT_EMAIL) return;
+  if (!process.env.EMAIL_API_KEY || !alert.user_email) return;
 
   try {
     await fetch('https://api.resend.com/emails', {
@@ -486,24 +577,27 @@ async function sendAlertEmail(alert, quote) {
       },
       body: JSON.stringify({
         from: 'Stock Tracker <onboarding@resend.dev>',
-        to: [process.env.ALERT_EMAIL],
+        to: [alert.user_email],
         subject: `${alert.ticker} alert: ${describeAlert(alert)}`,
         text: `${alert.ticker} is now $${quote.price.toFixed(2)} ` +
           `(${quote.changePercent > 0 ? '+' : ''}${quote.changePercent.toFixed(2)}% today).\n\n` +
           `This alert was set to notify you when it ${describeAlert(alert)}.`,
       }),
     });
-    console.log(`Sent alert email for ${alert.ticker}.`);
+    console.log(`Sent alert email for ${alert.ticker} to ${alert.user_email}.`);
   } catch (err) {
     console.log('Failed to send alert email:', err.message);
   }
 }
 
-// For one ticker's fresh quote, check every active alert rule that
-// watches it, and fire + update whichever ones are triggered.
+// Checks every active alert across ALL users for one ticker —
+// joined to users so we know each alert's owner's email address.
 async function checkAlertsForTicker(ticker, quote) {
   const { rows: activeAlerts } = await pool.query(
-    'SELECT * FROM alerts WHERE ticker = $1 AND active = true',
+    `SELECT alerts.*, users.email AS user_email
+     FROM alerts
+     JOIN users ON users.id = alerts.user_id
+     WHERE alerts.ticker = $1 AND alerts.active = true`,
     [ticker]
   );
 
@@ -514,10 +608,7 @@ async function checkAlertsForTicker(ticker, quote) {
 
     if (isOneTime) {
       await sendAlertEmail(alert, quote);
-      await pool.query(
-        'UPDATE alerts SET active = false, last_triggered_at = NOW() WHERE id = $1',
-        [alert.id]
-      );
+      await pool.query('UPDATE alerts SET active = false, last_triggered_at = NOW() WHERE id = $1', [alert.id]);
     } else {
       const cooledDown = !alert.last_triggered_at ||
         (Date.now() - new Date(alert.last_triggered_at).getTime()) > ALERT_COOLDOWN_MS;
@@ -529,31 +620,24 @@ async function checkAlertsForTicker(ticker, quote) {
   }
 }
 
-// ------------------------------------------------------------
-// runScheduledChecks() — runs every SNAPSHOT_INTERVAL_MS, on its
-// own, independent of anyone having the page open. For every
-// watchlist ticker it: fetches one fresh quote, stores it in
-// price_history (feeding the sparkline), and checks that same
-// quote against any alert rules for that ticker (feeding email
-// notifications) — one Finnhub call serving two features.
-// ------------------------------------------------------------
+// Snapshots every DISTINCT ticker across ALL users' watchlists —
+// one Finnhub call per ticker serves everyone tracking it, whether
+// that's 1 person or 50.
 async function runScheduledChecks() {
   if (!dbReady) return;
 
   if (process.env.FINNHUB_API_KEY) {
     try {
-      const items = await getAllWatchlistItems();
-      for (const item of items) {
-        const quote = await fetchQuote(item.ticker);
+      const { rows: tickerRows } = await pool.query('SELECT DISTINCT ticker FROM watchlist');
+      for (const row of tickerRows) {
+        const ticker = row.ticker;
+        const quote = await fetchQuote(ticker);
         if (!quote.error) {
-          await pool.query(
-            'INSERT INTO price_history (ticker, price) VALUES ($1, $2)',
-            [item.ticker, quote.price]
-          );
-          await checkAlertsForTicker(item.ticker, quote);
+          await pool.query('INSERT INTO price_history (ticker, price) VALUES ($1, $2)', [ticker, quote.price]);
+          await checkAlertsForTicker(ticker, quote);
         }
       }
-      console.log(`Checked ${items.length} ticker(s): snapshotted + evaluated alerts.`);
+      console.log(`Checked ${tickerRows.length} distinct ticker(s) across all users.`);
     } catch (err) {
       console.log('Scheduled check failed:', err.message);
     }
@@ -569,7 +653,7 @@ async function runScheduledChecks() {
 }
 
 // ------------------------------------------------------------
-// SEARCH (unchanged from Phase 1c)
+// SEARCH — doesn't touch user data, so no auth needed here.
 // ------------------------------------------------------------
 const FINNHUB_SEARCH_URL = 'https://finnhub.io/api/v1/search';
 
@@ -618,21 +702,7 @@ app.get('/api/health', async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// STARTUP — the key fix.
-//
-// Previously we made app.listen() WAIT for the database to be
-// fully ready first. That backfired: while retrying a slow
-// database connection (up to 30 seconds), the server wasn't
-// listening on its port at all, and Railway's proxy showed
-// "Application failed to respond" — because nothing was there
-// to respond.
-//
-// The correct pattern: start listening immediately, so the app
-// is always reachable. Run the database connection separately,
-// in the background. Any request that needs the database before
-// it's ready gets a clean 503 "still starting up" message
-// (handled by requireDb above), instead of the whole site
-// appearing broken.
+// STARTUP
 // ------------------------------------------------------------
 const PORT = process.env.PORT || 3000;
 
@@ -640,10 +710,7 @@ app.listen(PORT, () => {
   console.log(`Stock tracker running on port ${PORT}`);
 });
 
-initDb();   // fires immediately, retries quietly in the background
+initDb();
 
-// Take one snapshot shortly after startup, so charts have at least
-// one data point without waiting a full 15 minutes for the first
-// scheduled run. Then keep snapshotting on the regular interval.
 setTimeout(runScheduledChecks, 8000);
 setInterval(runScheduledChecks, SNAPSHOT_INTERVAL_MS);
