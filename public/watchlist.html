@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Tracker</title>
+  <link rel="icon" href="/logo.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0B1220;
+      --surface: #131B2E;
+      --surface-hover: #182240;
+      --border: #232E47;
+      --border-soft: #1B2438;
+      --text: #EDF1F7;
+      --text-muted: #7C8AA5;
+      --text-faint: #4E5A75;
+      --accent: #6C8EEF;
+      --up: #3DDC97;
+      --up-bg: #12271F;
+      --down: #FF6B6B;
+      --down-bg: #2B1A1E;
+
+      --font-ui: 'Inter', system-ui, sans-serif;
+      --font-data: 'IBM Plex Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-ui);
+      display: flex;
+      justify-content: center;
+      padding: 48px 20px;
+    }
+
+    .app { width: 100%; max-width: 660px; }
+
+    /* ---- Header ---- */
+    .site-nav {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 20px;
+    }
+    .site-nav a {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-faint);
+      text-decoration: none;
+      padding: 6px 12px;
+      border-radius: 7px;
+    }
+    .site-nav a:hover { color: var(--text-muted); }
+    .site-nav a.active { background: var(--surface); color: var(--text); }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 2px;
+    }
+    .brand-row > div:nth-child(2) { flex: 1; }
+    .brand-mark {
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
+
+    .btn-logout {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-faint);
+      border-radius: 8px;
+      width: 32px;
+      height: 32px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .btn-logout:hover { border-color: var(--down); color: var(--down); }
+
+    /* ---- Auth screen ---- */
+    .auth-screen {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .auth-card {
+      width: 100%;
+      max-width: 360px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px 28px;
+    }
+    .auth-card .brand-row { margin-bottom: 24px; }
+
+    .auth-tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 4px;
+      margin-bottom: 20px;
+    }
+    .auth-tab {
+      flex: 1;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-family: var(--font-ui);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 0;
+      border-radius: 7px;
+      cursor: pointer;
+    }
+    .auth-tab.active { background: var(--surface-hover); color: var(--text); }
+
+    #authForm { display: flex; flex-direction: column; gap: 10px; }
+    #authForm input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 11px 14px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: var(--font-ui);
+      outline: none;
+    }
+    #authForm input:focus { border-color: var(--accent); }
+
+    .auth-hint {
+      font-size: 11px;
+      color: var(--text-faint);
+      margin-top: -4px;
+    }
+    .auth-msg {
+      font-size: 13px;
+      color: var(--down);
+      min-height: 16px;
+    }
+    .btn-auth-submit {
+      background: var(--accent);
+      color: #0B1220;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 0;
+      font-size: 14px;
+      font-weight: 700;
+      font-family: var(--font-ui);
+      cursor: pointer;
+      margin-top: 6px;
+    }
+    .btn-auth-submit:hover { opacity: 0.9; }
+    .btn-auth-submit:disabled { opacity: 0.6; cursor: default; }
+
+    .eyebrow {
+      font-family: var(--font-data);
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 8px;
+    }
+    h1 {
+      font-size: 34px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 10px 0 20px;
+    }
+    .meta { font-size: 13px; color: var(--text-muted); }
+    .refresh-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 12px;
+      font-family: var(--font-ui);
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .refresh-btn:hover { border-color: var(--accent); color: var(--text); }
+
+    /* ---- Summary strip: immediate at-a-glance signal ---- */
+    .summary {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .summary-pill {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .summary-pill .label {
+      font-size: 11px;
+      color: var(--text-faint);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 4px;
+    }
+    .summary-pill .value {
+      font-family: var(--font-data);
+      font-size: 22px;
+      font-weight: 700;
+    }
+    .summary-pill.up .value { color: var(--up); }
+    .summary-pill.down .value { color: var(--down); }
+
+    /* ---- Search ---- */
+    .add-wrap { position: relative; margin-bottom: 24px; }
+    .add-row {
+      display: flex;
+      gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 5px;
+      transition: border-color 0.15s;
+    }
+    .add-row:focus-within { border-color: var(--accent); }
+    .search-icon { display: flex; align-items: center; padding-left: 12px; color: var(--text-faint); }
+    input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      padding: 11px 8px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: var(--font-ui);
+      outline: none;
+    }
+    input::placeholder { color: var(--text-faint); }
+    .btn-add {
+      background: var(--accent);
+      color: #0B1220;
+      border: none;
+      border-radius: 8px;
+      padding: 0 20px;
+      font-size: 13px;
+      font-weight: 700;
+      font-family: var(--font-ui);
+      cursor: pointer;
+    }
+    .btn-add:hover { opacity: 0.9; }
+
+    .suggestions {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      right: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      z-index: 10;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.4);
+    }
+    .suggestion {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 11px 14px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .suggestion:last-child { border-bottom: none; }
+    .suggestion:hover { background: var(--surface-hover); }
+    .s-symbol {
+      font-family: var(--font-data);
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      min-width: 52px;
+    }
+    .s-name {
+      color: var(--text-muted);
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .msg { min-height: 18px; font-size: 13px; margin: -14px 0 14px 4px; }
+    .msg.error { color: var(--down); }
+    .server-error {
+      color: var(--down);
+      font-size: 13px;
+      background: var(--down-bg);
+      border: 1px solid #4A2329;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+    }
+    .server-error:empty { display: none; }
+
+    /* ---- Watchlist cards ---- */
+    .list { display: flex; flex-direction: column; gap: 10px; }
+    .empty {
+      padding: 56px 24px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 14px;
+      border: 1px dashed var(--border);
+      border-radius: 14px;
+    }
+
+    .card {
+      display: flex;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 18px;
+      transition: border-color 0.15s, transform 0.1s;
+      gap: 14px;
+    }
+    .card:hover { border-color: #2C3B5C; transform: translateY(-1px); }
+    .card.dir-up { border-left-color: var(--up); }
+    .card.dir-down { border-left-color: var(--down); }
+
+    .card.dragging { opacity: 0.35; }
+    .card.drag-over-top { box-shadow: inset 0 2px 0 var(--accent); }
+    .card.drag-over-bottom { box-shadow: inset 0 -2px 0 var(--accent); }
+
+    .drag-handle {
+      display: flex;
+      align-items: center;
+      color: var(--text-faint);
+      cursor: grab;
+      flex-shrink: 0;
+      touch-action: none;
+    }
+    .drag-handle:active { cursor: grabbing; }
+    .card:hover .drag-handle { color: var(--text-muted); }
+
+    /* Logo / avatar */
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      flex-shrink: 0;
+      object-fit: contain;
+      background: #fff;
+      padding: 4px;
+    }
+    .avatar-fallback {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-data);
+      font-weight: 700;
+      font-size: 15px;
+      color: #0B1220;
+    }
+
+    .card-body { flex: 1; min-width: 0; }
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+    .card-id { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .ticker-row { display: flex; align-items: baseline; gap: 8px; }
+    .ticker {
+      font-family: var(--font-data);
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .company-name {
+      font-size: 12px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 200px;
+    }
+
+    .card-price { text-align: right; flex-shrink: 0; }
+    .price {
+      font-family: var(--font-data);
+      font-size: 24px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+    .change {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      margin-top: 6px;
+      font-family: var(--font-data);
+      font-size: 12px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+    .change.up { color: var(--up); background: var(--up-bg); }
+    .change.down { color: var(--down); background: var(--down-bg); }
+    .change.flat { color: var(--text-muted); background: var(--border-soft); }
+
+    /* ---- Day range bar ---- */
+    /* ---- Sparkline ---- */
+    .sparkline-wrap {
+      height: 32px;
+      margin-bottom: 10px;
+    }
+    .sparkline { width: 100%; height: 100%; display: block; }
+    .sparkline-empty {
+      height: 32px;
+      display: flex;
+      align-items: center;
+      font-size: 11px;
+      color: var(--text-faint);
+      font-style: italic;
+    }
+
+    .range-row { display: flex; align-items: center; gap: 10px; }
+    .range-label {
+      font-family: var(--font-data);
+      font-size: 10px;
+      color: var(--text-faint);
+      width: 50px;
+      text-align: right;
+    }
+    .range-label.left { text-align: left; }
+    .range-track {
+      position: relative;
+      flex: 1;
+      height: 5px;
+      background: var(--border-soft);
+      border-radius: 3px;
+      overflow: visible;
+    }
+    .range-fill {
+      position: absolute;
+      top: 0; left: 0;
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--down), var(--up));
+      opacity: 0.35;
+    }
+    .range-dot {
+      position: absolute;
+      top: 50%;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      border: 2px solid var(--surface);
+      box-shadow: 0 0 0 1px var(--border);
+    }
+    .range-dot.up { background: var(--up); }
+    .range-dot.down { background: var(--down); }
+    .range-dot.flat { background: var(--text-muted); }
+
+    .card-footer-msg { font-size: 12px; color: var(--text-faint); }
+
+    .btn-bell {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      background: none;
+      border: none;
+      color: var(--text-faint);
+      cursor: pointer;
+      padding: 0;
+    }
+    .btn-bell:hover { color: var(--accent); }
+    .btn-bell.has-alerts { color: var(--accent); }
+    .bell-count {
+      font-family: var(--font-data);
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .alerts-panel {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-soft);
+    }
+    .alert-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      font-size: 12px;
+    }
+    .alert-label { color: var(--text); flex: 1; }
+    .alert-fired {
+      font-size: 10px;
+      color: var(--text-faint);
+      font-style: italic;
+    }
+    .btn-alert-remove {
+      background: none;
+      border: none;
+      color: var(--text-faint);
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0 2px;
+    }
+    .btn-alert-remove:hover { color: var(--down); }
+    .alert-empty {
+      font-size: 12px;
+      color: var(--text-faint);
+      padding: 4px 0 8px;
+    }
+    .alert-form {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .alert-type-select, .alert-threshold-input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 12px;
+      font-family: var(--font-ui);
+      padding: 6px 8px;
+    }
+    .alert-type-select { flex: 1.4; }
+    .alert-threshold-input { flex: 1; min-width: 0; }
+    .btn-alert-add {
+      background: var(--accent);
+      color: #0B1220;
+      border: none;
+      border-radius: 6px;
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 700;
+      font-family: var(--font-ui);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn-remove {
+      background: none;
+      border: none;
+      color: var(--text-faint);
+      font-size: 11px;
+      font-family: var(--font-ui);
+      cursor: pointer;
+      padding: 0;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .btn-remove:hover { color: var(--down); }
+
+    /* ---- Skeleton loading ---- */
+    .skeleton {
+      background: linear-gradient(90deg, var(--border-soft) 25%, var(--border) 37%, var(--border-soft) 63%);
+      background-size: 400% 100%;
+      animation: shimmer 1.6s ease infinite;
+      border-radius: 4px;
+    }
+    @keyframes shimmer {
+      0% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .skel-price { width: 70px; height: 24px; margin-left: auto; }
+    .skel-change { width: 48px; height: 18px; margin: 6px 0 0 auto; }
+    .skel-range { width: 100%; height: 5px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .skeleton { animation: none; }
+      .card { transition: none; }
+    }
+
+    @media (max-width: 480px) {
+      .company-name { max-width: 120px; }
+      h1 { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="auth-screen" id="authScreen">
+    <div class="auth-card">
+      <div class="brand-row">
+        <img src="/logo.svg" alt="" class="brand-mark" width="36" height="36" />
+        <div>
+          <div class="eyebrow">Personal terminal</div>
+          <h1>Stock Tracker</h1>
+        </div>
+      </div>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tabLogin">Log in</button>
+        <button class="auth-tab" id="tabSignup">Sign up</button>
+      </div>
+
+      <form id="authForm">
+        <input type="email" id="authEmail" placeholder="Email" autocomplete="email" required />
+        <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password" required />
+        <div class="auth-hint" id="authHint"></div>
+        <div class="auth-msg" id="authMsg"></div>
+        <button type="submit" class="btn-auth-submit" id="authSubmit">Log in</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="app" id="appRoot" style="display:none;">
+    <nav class="site-nav">
+      <a href="/">Home</a>
+      <a href="/watchlist.html" class="active">Watchlist</a>
+    </nav>
+    <div class="brand-row">
+      <img src="/logo.svg" alt="" class="brand-mark" width="36" height="36" />
+      <div>
+        <div class="eyebrow">Personal terminal</div>
+        <h1>Stock Tracker</h1>
+      </div>
+      <button class="btn-logout" id="logoutBtn" title="Log out">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="meta-row">
+      <div class="meta" id="lastUpdated">not yet loaded</div>
+      <button class="refresh-btn" id="refreshBtn">↻ Refresh</button>
+    </div>
+
+    <div class="summary" id="summary" style="display:none;">
+      <div class="summary-pill up">
+        <div class="label">Up today</div>
+        <div class="value" id="upCount">0</div>
+      </div>
+      <div class="summary-pill down">
+        <div class="label">Down today</div>
+        <div class="value" id="downCount">0</div>
+      </div>
+      <div class="summary-pill">
+        <div class="label">Watching</div>
+        <div class="value" id="watchCount">0</div>
+      </div>
+    </div>
+
+    <div class="add-wrap">
+      <div class="add-row">
+        <span class="search-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </span>
+        <input id="tickerInput" placeholder="Search company or ticker (e.g. Amazon)" autocomplete="off" />
+        <button class="btn-add" id="addBtn">Add</button>
+      </div>
+      <div class="suggestions" id="suggestions"></div>
+    </div>
+    <div class="msg" id="msg"></div>
+    <div class="server-error" id="serverError"></div>
+
+    <div class="list" id="list"></div>
+  </div>
+
+  <script src="/auth.js"></script>
+  <script>
+    // Auth (login/signup/logout/session check) now lives in
+    // auth.js, shared across every page. AuthGuard.init() wires up
+    // the login form and checks for an existing session; initApp()
+    // (defined further down) only runs once we're confirmed logged in.
+    AuthGuard.init(initApp);
+
+    const input = document.getElementById('tickerInput');
+    const addBtn = document.getElementById('addBtn');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const msgEl = document.getElementById('msg');
+    const serverErrorEl = document.getElementById('serverError');
+    const listEl = document.getElementById('list');
+    const suggestionsEl = document.getElementById('suggestions');
+    const summaryEl = document.getElementById('summary');
+    const watchCountEl = document.getElementById('watchCount');
+    const upCountEl = document.getElementById('upCount');
+    const downCountEl = document.getElementById('downCount');
+    const lastUpdatedEl = document.getElementById('lastUpdated');
+
+    let items = [];
+    let quotesByTicker = {};
+    let historyByTicker = {};
+    let alertsByTicker = {};
+    let openAlertTicker = null;   // which card's alert panel is currently expanded
+    let lastUpdatedAt = null;
+
+    function esc(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // A handful of accent colors for the fallback avatar badge, picked
+    // deterministically per ticker (same ticker always gets the same
+    // color) so the UI feels designed, not random on every reload.
+    const BADGE_COLORS = ['#6C8EEF', '#3DDC97', '#FFB454', '#FF6B6B', '#B892FF', '#4FD1E8'];
+    function badgeColor(ticker) {
+      let hash = 0;
+      for (let i = 0; i < ticker.length; i++) hash = ticker.charCodeAt(i) + ((hash << 5) - hash);
+      return BADGE_COLORS[Math.abs(hash) % BADGE_COLORS.length];
+    }
+
+    function avatarHtml(item) {
+      if (item.logo) {
+        return `<img class="avatar" src="${esc(item.logo)}" alt=""
+                 onerror="this.outerHTML='<div class=&quot;avatar-fallback&quot; style=&quot;background:${badgeColor(item.ticker)}&quot;>${item.ticker[0]}</div>'" />`;
+      }
+      return `<div class="avatar-fallback" style="background:${badgeColor(item.ticker)}">${esc(item.ticker[0])}</div>`;
+    }
+
+    // ---- Sparkline: a small trend line built from our own stored
+    // history (Finnhub's free tier doesn't give us historical data,
+    // so we're drawing from the snapshots our own server has been
+    // quietly collecting every 15 minutes). ----
+    function sparklineHtml(ticker) {
+      const points = historyByTicker[ticker];
+
+      if (!points || points.length < 2) {
+        return `<div class="sparkline-empty">Collecting history — check back soon</div>`;
+      }
+
+      const width = 100, height = 32;
+      const prices = points.map(p => p.price);
+      const min = Math.min(...prices);
+      const max = Math.max(...prices);
+      const range = max - min;
+
+      const stepX = width / (points.length - 1);
+      const coords = points.map((p, i) => {
+        const x = i * stepX;
+        // A perfectly flat price (range === 0) is centered vertically,
+        // rather than dividing by a fake "1" and pinning it to the
+        // bottom edge, which would visually look like a downtrend.
+        const y = range === 0 ? height / 2 : height - ((p.price - min) / range) * height;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+
+      const trendUp = prices[prices.length - 1] >= prices[0];
+      const stroke = trendUp ? 'var(--up)' : 'var(--down)';
+
+      return `
+        <svg class="sparkline" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+          <polyline points="${coords}" fill="none" style="stroke:${stroke}"
+            stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" />
+        </svg>
+      `;
+    }
+
+    function rangeBarHtml(q) {
+      const { dayLow: lo, dayHigh: hi, price } = q;
+      if (lo == null || hi == null || price == null) {
+        return `<div class="range-row">
+          <span class="range-label left"></span>
+          <div class="range-track"><div class="skeleton skel-range"></div></div>
+          <span class="range-label"></span>
+        </div>`;
+      }
+      const pct = hi === lo ? 50 : Math.max(0, Math.min(100, ((price - lo) / (hi - lo)) * 100));
+      const dir = q.changePercent > 0 ? 'up' : q.changePercent < 0 ? 'down' : 'flat';
+
+      return `
+        <div class="range-row">
+          <span class="range-label left">$${lo.toFixed(2)}</span>
+          <div class="range-track">
+            <div class="range-fill" style="width:${pct}%"></div>
+            <div class="range-dot ${dir}" style="left:${pct}%"></div>
+          </div>
+          <span class="range-label">$${hi.toFixed(2)}</span>
+        </div>
+      `;
+    }
+
+    // A small grip icon so people notice cards are draggable, without
+    // needing to explain it in words.
+    const DRAG_HANDLE = `
+      <span class="drag-handle" title="Drag to reorder">
+        <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
+          <circle cx="2" cy="2" r="1.4"/><circle cx="8" cy="2" r="1.4"/>
+          <circle cx="2" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/>
+          <circle cx="2" cy="14" r="1.4"/><circle cx="8" cy="14" r="1.4"/>
+        </svg>
+      </span>`;
+
+    function conditionLabel(alert) {
+      const t = parseFloat(alert.threshold);
+      switch (alert.condition_type) {
+        case 'percent_drop': return `Drops ${t}% in a day`;
+        case 'percent_gain': return `Rises ${t}% in a day`;
+        case 'price_above': return `Price reaches $${t.toFixed(2)}`;
+        case 'price_below': return `Price falls to $${t.toFixed(2)}`;
+        default: return 'Alert';
+      }
+    }
+
+    function alertsPanelHtml(ticker) {
+      const alerts = alertsByTicker[ticker] || [];
+
+      const rowsHtml = alerts.length
+        ? alerts.map(a => `
+            <div class="alert-row">
+              <span class="alert-label">${esc(conditionLabel(a))}</span>
+              ${!a.active ? '<span class="alert-fired">fired \u2014 off</span>' : ''}
+              <button class="btn-alert-remove" data-id="${a.id}" title="Delete alert">\u00d7</button>
+            </div>
+          `).join('')
+        : '<div class="alert-empty">No alerts set for this ticker yet</div>';
+
+      return `
+        <div class="alerts-panel">
+          ${rowsHtml}
+          <div class="alert-form">
+            <select class="alert-type-select">
+              <option value="percent_drop">Drops by %</option>
+              <option value="percent_gain">Rises by %</option>
+              <option value="price_above">Price reaches $</option>
+              <option value="price_below">Price falls to $</option>
+            </select>
+            <input type="number" class="alert-threshold-input" placeholder="5" min="0" step="0.01" />
+            <button class="btn-alert-add" data-ticker="${esc(ticker)}">Set alert</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function bellButtonHtml(ticker) {
+      const activeCount = (alertsByTicker[ticker] || []).filter(a => a.active).length;
+      return `
+        <button class="btn-bell ${activeCount ? 'has-alerts' : ''}" data-ticker="${esc(ticker)}" title="Manage alerts">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          ${activeCount ? `<span class="bell-count">${activeCount}</span>` : ''}
+        </button>
+      `;
+    }
+
+    function cardHtml(item) {
+      const q = quotesByTicker[item.ticker];
+      const nameHtml = item.name ? `<div class="company-name">${esc(item.name)}</div>` : '';
+      const dirClass = q && !q.error ? (q.changePercent > 0 ? 'dir-up' : q.changePercent < 0 ? 'dir-down' : '') : '';
+
+      if (!q) {
+        return `
+          <div class="card" draggable="true" data-ticker="${esc(item.ticker)}">
+            ${DRAG_HANDLE}
+            ${avatarHtml(item)}
+            <div class="card-body">
+              <div class="card-top">
+                <div class="card-id">
+                  <div class="ticker-row"><span class="ticker">${esc(item.ticker)}</span></div>
+                  ${nameHtml}
+                </div>
+                <div class="card-price">
+                  <div class="skeleton skel-price"></div>
+                  <div class="skeleton skel-change"></div>
+                </div>
+              </div>
+              <div class="range-row">
+                <span class="range-label left"></span>
+                <div class="range-track"><div class="skeleton skel-range"></div></div>
+                <span class="range-label"></span>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (q.error) {
+        return `
+          <div class="card" draggable="true" data-ticker="${esc(item.ticker)}">
+            ${DRAG_HANDLE}
+            ${avatarHtml(item)}
+            <div class="card-body">
+              <div class="card-top">
+                <div class="card-id">
+                  <div class="ticker-row"><span class="ticker">${esc(item.ticker)}</span></div>
+                  ${nameHtml}
+                </div>
+                <button class="btn-remove" data-ticker="${esc(item.ticker)}">Remove</button>
+              </div>
+              <div class="card-footer-msg">${esc(q.error)}</div>
+            </div>
+          </div>
+        `;
+      }
+
+      const dir = q.changePercent > 0 ? 'up' : q.changePercent < 0 ? 'down' : 'flat';
+      const arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '–';
+      const sign = q.changePercent > 0 ? '+' : '';
+
+      return `
+        <div class="card ${dirClass}" draggable="true" data-ticker="${esc(item.ticker)}">
+          ${DRAG_HANDLE}
+          ${avatarHtml(item)}
+          <div class="card-body">
+            <div class="card-top">
+              <div class="card-id">
+                <div class="ticker-row">
+                  <span class="ticker">${esc(item.ticker)}</span>
+                  ${bellButtonHtml(item.ticker)}
+                  <button class="btn-remove" data-ticker="${esc(item.ticker)}">Remove</button>
+                </div>
+                ${nameHtml}
+              </div>
+              <div class="card-price">
+                <div class="price">$${q.price.toFixed(2)}</div>
+                <div class="change ${dir}">${arrow} ${sign}${q.changePercent.toFixed(2)}%</div>
+              </div>
+            </div>
+            <div class="sparkline-wrap">${sparklineHtml(item.ticker)}</div>
+            ${rangeBarHtml(q)}
+            ${openAlertTicker === item.ticker ? alertsPanelHtml(item.ticker) : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    function render() {
+      if (items.length === 0) {
+        summaryEl.style.display = 'none';
+        listEl.innerHTML = '<div class="empty">Your watchlist is empty — search for a company above to start tracking it</div>';
+        return;
+      }
+
+      let up = 0, down = 0;
+      items.forEach(item => {
+        const q = quotesByTicker[item.ticker];
+        if (q && !q.error) {
+          if (q.changePercent > 0) up++;
+          else if (q.changePercent < 0) down++;
+        }
+      });
+      watchCountEl.textContent = items.length;
+      upCountEl.textContent = up;
+      downCountEl.textContent = down;
+      summaryEl.style.display = 'flex';
+
+      listEl.innerHTML = items.map(cardHtml).join('');
+    }
+
+    function updateLastUpdatedLabel() {
+      if (!lastUpdatedAt) return;
+      const secs = Math.floor((Date.now() - lastUpdatedAt) / 1000);
+      lastUpdatedEl.textContent = secs < 5 ? 'Updated just now' : `Updated ${secs}s ago`;
+    }
+    setInterval(updateLastUpdatedLabel, 1000);
+
+    async function loadWatchlist() {
+      const res = await fetch('/api/watchlist');
+      const data = await res.json();
+      if (!res.ok) {
+        serverErrorEl.textContent = data.error || 'Could not load watchlist';
+        return;
+      }
+      items = data.items;
+      render();
+      loadPrices();
+      loadHistory();
+    }
+
+    async function loadPrices() {
+      serverErrorEl.textContent = '';
+      try {
+        const res = await fetch('/api/prices');
+        const data = await res.json();
+        if (!res.ok) {
+          serverErrorEl.textContent = data.error || 'Could not load prices';
+          return;
+        }
+        quotesByTicker = {};
+        data.quotes.forEach(q => { quotesByTicker[q.ticker] = q; });
+        lastUpdatedAt = Date.now();
+        updateLastUpdatedLabel();
+        render();
+      } catch (err) {
+        serverErrorEl.textContent = 'Could not reach the server';
+      }
+    }
+
+    // New history points only appear every 15 minutes (that's how
+    // often the server snapshots), so there's no need to re-fetch
+    // this as often as prices. Every 2 minutes is plenty responsive
+    // without doing pointless extra work.
+    async function loadHistory() {
+      try {
+        const res = await fetch('/api/history');
+        const data = await res.json();
+        if (res.ok) {
+          historyByTicker = data.history;
+          render();
+        }
+      } catch (err) {
+        // Silent on purpose — the sparkline just shows its
+        // "collecting history" placeholder until this succeeds.
+      }
+    }
+
+    function groupAlertsByTicker(alerts) {
+      const grouped = {};
+      alerts.forEach(a => {
+        if (!grouped[a.ticker]) grouped[a.ticker] = [];
+        grouped[a.ticker].push(a);
+      });
+      return grouped;
+    }
+
+    async function loadAlerts() {
+      try {
+        const res = await fetch('/api/alerts');
+        const data = await res.json();
+        if (res.ok) {
+          alertsByTicker = groupAlertsByTicker(data.alerts);
+          render();
+        }
+      } catch (err) {
+        // Silent — alert badges just won't show counts until this succeeds.
+      }
+    }
+
+    async function addAlert(ticker, conditionType, threshold) {
+      const res = await fetch('/api/alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticker, conditionType, threshold }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alertsByTicker = groupAlertsByTicker(data.alerts);
+        render();
+      }
+    }
+
+    async function removeAlert(id) {
+      const res = await fetch('/api/alerts/' + id, { method: 'DELETE' });
+      const data = await res.json();
+      if (res.ok) {
+        alertsByTicker = groupAlertsByTicker(data.alerts);
+        render();
+      }
+    }
+
+    async function addTickerDirect(ticker, name) {
+      const res = await fetch('/api/watchlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticker, name: name || '' })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        msgEl.textContent = data.error;
+        msgEl.className = 'msg error';
+        return;
+      }
+
+      msgEl.textContent = '';
+      input.value = '';
+      suggestionsEl.innerHTML = '';
+      items = data.items;
+      render();
+      loadPrices();
+    }
+
+    async function addTicker() {
+      const query = input.value.trim();
+      if (!query) return;
+
+      const searchRes = await fetch('/api/search?q=' + encodeURIComponent(query));
+      const searchData = await searchRes.json();
+
+      if (searchData.results && searchData.results[0]) {
+        addTickerDirect(searchData.results[0].symbol, searchData.results[0].name);
+      } else {
+        addTickerDirect(query.toUpperCase(), null);
+      }
+    }
+
+    async function removeTicker(ticker) {
+      const res = await fetch('/api/watchlist/' + ticker, { method: 'DELETE' });
+      const data = await res.json();
+      items = data.items;
+      delete quotesByTicker[ticker];
+      render();
+    }
+
+    let searchTimer = null;
+
+    input.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      const query = input.value.trim();
+      if (query.length < 2) {
+        suggestionsEl.innerHTML = '';
+        return;
+      }
+      searchTimer = setTimeout(() => runSearch(query), 300);
+    });
+
+    async function runSearch(query) {
+      const res = await fetch('/api/search?q=' + encodeURIComponent(query));
+      const data = await res.json();
+      renderSuggestions(data.results || []);
+    }
+
+    function renderSuggestions(results) {
+      if (results.length === 0) {
+        suggestionsEl.innerHTML = '';
+        return;
+      }
+      suggestionsEl.innerHTML = results.map(r => `
+        <div class="suggestion" data-symbol="${esc(r.symbol)}" data-name="${esc(r.name)}">
+          <span class="s-symbol">${esc(r.symbol)}</span>
+          <span class="s-name">${esc(r.name)}</span>
+        </div>
+      `).join('');
+    }
+
+    suggestionsEl.addEventListener('click', e => {
+      const item = e.target.closest('.suggestion');
+      if (item) addTickerDirect(item.dataset.symbol, item.dataset.name);
+    });
+
+    document.addEventListener('click', e => {
+      if (!e.target.closest('.add-wrap')) suggestionsEl.innerHTML = '';
+    });
+
+    addBtn.addEventListener('click', addTicker);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') addTicker(); });
+
+    listEl.addEventListener('click', e => {
+      const removeBtn = e.target.closest('.btn-remove');
+      if (removeBtn) { removeTicker(removeBtn.dataset.ticker); return; }
+
+      const bellBtn = e.target.closest('.btn-bell');
+      if (bellBtn) {
+        const t = bellBtn.dataset.ticker;
+        openAlertTicker = (openAlertTicker === t) ? null : t;
+        render();
+        return;
+      }
+
+      const addAlertBtn = e.target.closest('.btn-alert-add');
+      if (addAlertBtn) {
+        const panel = addAlertBtn.closest('.alerts-panel');
+        const conditionType = panel.querySelector('.alert-type-select').value;
+        const thresholdInput = panel.querySelector('.alert-threshold-input');
+        const threshold = parseFloat(thresholdInput.value);
+
+        if (!Number.isFinite(threshold) || threshold <= 0) {
+          thresholdInput.focus();
+          return;
+        }
+        addAlert(addAlertBtn.dataset.ticker, conditionType, threshold);
+        return;
+      }
+
+      const removeAlertBtn = e.target.closest('.btn-alert-remove');
+      if (removeAlertBtn) { removeAlert(removeAlertBtn.dataset.id); return; }
+    });
+
+    // ---- DRAG-AND-DROP REORDERING ----
+    // Uses the browser's native drag-and-drop, not a library. Key
+    // design choice: we only touch the DOM (via render()) on 'drop',
+    // never during 'dragover'. Re-rendering mid-drag would destroy
+    // the very element the browser is tracking as "being dragged"
+    // and silently cancel the whole gesture — a classic native-DnD
+    // gotcha. During 'dragover' we only toggle CSS classes for the
+    // visual indicator line, which is safe to do repeatedly.
+    let draggedTicker = null;
+
+    listEl.addEventListener('dragstart', e => {
+      const card = e.target.closest('.card');
+      if (!card) return;
+      draggedTicker = card.dataset.ticker;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', draggedTicker);   // required by Firefox
+    });
+
+    listEl.addEventListener('dragend', e => {
+      const card = e.target.closest('.card');
+      if (card) card.classList.remove('dragging');
+      listEl.querySelectorAll('.card').forEach(c =>
+        c.classList.remove('drag-over-top', 'drag-over-bottom')
+      );
+      draggedTicker = null;
+    });
+
+    listEl.addEventListener('dragover', e => {
+      const card = e.target.closest('.card');
+      if (!card || !draggedTicker || card.dataset.ticker === draggedTicker) return;
+      e.preventDefault();   // required — tells the browser "yes, a drop is allowed here"
+
+      // Which half of the target card is the cursor over? That decides
+      // whether the dragged card would land above or below it.
+      const rect = card.getBoundingClientRect();
+      const isAfter = e.clientY > rect.top + rect.height / 2;
+
+      listEl.querySelectorAll('.card').forEach(c =>
+        c.classList.remove('drag-over-top', 'drag-over-bottom')
+      );
+      card.classList.add(isAfter ? 'drag-over-bottom' : 'drag-over-top');
+    });
+
+    listEl.addEventListener('drop', e => {
+      const card = e.target.closest('.card');
+      listEl.querySelectorAll('.card').forEach(c =>
+        c.classList.remove('drag-over-top', 'drag-over-bottom')
+      );
+      if (!card || !draggedTicker) return;
+      e.preventDefault();
+
+      const targetTicker = card.dataset.ticker;
+      if (targetTicker === draggedTicker) return;
+
+      const draggedIndex = items.findIndex(i => i.ticker === draggedTicker);
+      if (draggedIndex === -1) return;
+
+      const [moved] = items.splice(draggedIndex, 1);
+
+      const rect = card.getBoundingClientRect();
+      const isAfter = e.clientY > rect.top + rect.height / 2;
+      const targetIndex = items.findIndex(i => i.ticker === targetTicker);
+      items.splice(isAfter ? targetIndex + 1 : targetIndex, 0, moved);
+
+      render();       // safe now — the drag gesture has already ended
+      saveOrder();    // persist the new order to the database
+    });
+
+    async function saveOrder() {
+      try {
+        await fetch('/api/watchlist/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order: items.map(i => i.ticker) })
+        });
+      } catch (err) {
+        // If this fails, the on-screen order and the saved order
+        // briefly disagree. loadWatchlist() on the next refresh
+        // corrects it, so we don't need to handle this loudly.
+      }
+    }
+
+    // Called once, right after we know someone is logged in — either
+    // immediately (existing session found) or right after they submit
+    // the login/signup form.
+    let appInitialized = false;
+    function initApp() {
+      if (appInitialized) return;   // never double-start the intervals
+      appInitialized = true;
+      loadWatchlist();
+      loadAlerts();
+      setInterval(loadPrices, 30000);
+      setInterval(loadHistory, 120000);
+      setInterval(loadAlerts, 120000);
+    }
+  </script>
+</body>
+</html>
