@@ -445,6 +445,37 @@ app.get('/api/prices', requireAuth, async (req, res) => {
 });
 
 // ------------------------------------------------------------
+// ROUTE: GET /api/indexes
+// A small fixed set of quotes for the homepage's "market pulse"
+// strip. Finnhub's free tier doesn't support real index tickers
+// (like ^GSPC for the S&P 500) — those need a paid plan. Instead
+// we use the ETFs that track each index almost exactly: SPY
+// tracks the S&P 500, DIA tracks the Dow, QQQ tracks the Nasdaq
+// 100. They're ordinary, fully-supported stock tickers as far as
+// Finnhub is concerned, so this reuses fetchQuote() unchanged.
+// ------------------------------------------------------------
+const MARKET_INDEXES = [
+  { ticker: 'SPY', label: 'S&P 500' },
+  { ticker: 'DIA', label: 'Dow Jones' },
+  { ticker: 'QQQ', label: 'Nasdaq 100' },
+];
+
+app.get('/api/indexes', requireAuth, async (req, res) => {
+  if (!process.env.FINNHUB_API_KEY) {
+    return res.status(500).json({ error: 'Server is missing FINNHUB_API_KEY' });
+  }
+
+  try {
+    const quotes = await Promise.all(
+      MARKET_INDEXES.map(async (idx) => ({ ...idx, ...(await fetchQuote(idx.ticker)) }))
+    );
+    res.json({ indexes: quotes });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load market indexes' });
+  }
+});
+
+// ------------------------------------------------------------
 // HISTORY — price_history itself stays a SHARED table (a price
 // snapshot for AAPL at a given moment is the same fact regardless
 // of who's watching it — no reason to duplicate that data per
