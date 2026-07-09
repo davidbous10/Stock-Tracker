@@ -37,24 +37,38 @@ const pool = new Pool({
 // never had to click "Create table" in Railway's UI — the code
 // sets up its own schema, every time, on every environment.
 // ------------------------------------------------------------
-async function initDb() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS watchlist (
-      id SERIAL PRIMARY KEY,
-      ticker TEXT UNIQUE NOT NULL,
-      added_at TIMESTAMP DEFAULT NOW()
-    )
-  `);
+// Retries connecting up to `retries` times, waiting `delayMs`
+// between attempts. This protects us from a very real timing
+// issue: on a redeploy, Postgres and our server can both restart
+// around the same moment, and Postgres may need a few extra
+// seconds to be ready. Without a retry, our server gives up on
+// the very first attempt and crashes. With it, we patiently wait.
+async function initDb(retries = 10, delayMs = 3000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS watchlist (
+          id SERIAL PRIMARY KEY,
+          ticker TEXT UNIQUE NOT NULL,
+          added_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
 
-  // Seed two starter tickers, but ONLY the very first time ever
-  // (empty table). Otherwise every restart would silently re-add
-  // AAPL/NVDA even after you removed them.
-  const { rows } = await pool.query('SELECT COUNT(*) FROM watchlist');
-  if (parseInt(rows[0].count, 10) === 0) {
-    await pool.query(
-      `INSERT INTO watchlist (ticker) VALUES ($1), ($2) ON CONFLICT DO NOTHING`,
-      ['AAPL', 'NVDA']
-    );
+      const { rows } = await pool.query('SELECT COUNT(*) FROM watchlist');
+      if (parseInt(rows[0].count, 10) === 0) {
+        await pool.query(
+          `INSERT INTO watchlist (ticker) VALUES ($1), ($2) ON CONFLICT DO NOTHING`,
+          ['AAPL', 'NVDA']
+        );
+      }
+
+      console.log('Database connected and ready.');
+      return;   // success — stop retrying
+    } catch (err) {
+      console.log(`Database not ready yet (attempt ${attempt}/${retries}): ${err.message}`);
+      if (attempt === retries) throw err;   // out of attempts — give up for real
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
   }
 }
 
