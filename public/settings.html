@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Stock Tracker</title>
+  <title>Trade Track</title>
   <link rel="icon" href="/logo.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -303,7 +303,7 @@
         <img src="/logo.svg" alt="" class="brand-mark" width="36" height="36" />
         <div>
           <div class="eyebrow">Personal terminal</div>
-          <h1>Stock Tracker</h1>
+          <h1>Trade Track</h1>
         </div>
       </div>
 
@@ -328,7 +328,7 @@
         <img src="/logo.svg" alt="" class="brand-mark" width="32" height="32" />
         <div>
           <div class="eyebrow">Personal terminal</div>
-          <div class="sidebar-title">Stock Tracker</div>
+          <div class="sidebar-title">Trade Track</div>
         </div>
       </div>
 
@@ -414,7 +414,7 @@
       document.getElementById('settingsEmailInline').textContent = email;
 
       try {
-        const res = await fetch('/api/auth/me');
+        const res = await AuthGuard.fetch('/api/auth/me');
         const data = await res.json();
         if (res.ok && data.createdAt) {
           document.getElementById('settingsSince').textContent =
@@ -449,7 +449,7 @@
       submitBtn.disabled = true;
 
       try {
-        const res = await fetch('/api/auth/change-password', {
+        const res = await AuthGuard.fetch('/api/auth/change-password', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ currentPassword, newPassword }),
