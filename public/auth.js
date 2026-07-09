@@ -65,9 +65,29 @@ const AuthGuard = (function () {
     if (onReadyCallback) onReadyCallback(email);
   }
 
-  function showLogin() {
+  function showLogin(message) {
     document.getElementById('authScreen').style.display = 'flex';
     document.getElementById('appRoot').style.display = 'none';
+    if (message) {
+      const authMsg = document.getElementById('authMsg');
+      authMsg.textContent = message;
+      authMsg.className = 'auth-msg';
+    }
+  }
+
+  // Every data call a page makes (loading the watchlist, prices,
+  // alerts, etc.) should go through THIS instead of a bare fetch().
+  // If the session has expired — or was somehow lost mid-use — the
+  // server answers with 401, and instead of leaving the page half
+  // full of "please log in" fragments scattered across different
+  // widgets, this catches it once, in one place, and cleanly bounces
+  // back to the login screen with an explanation.
+  async function authFetch(url, options) {
+    const res = await fetch(url, options);
+    if (res.status === 401) {
+      showLogin('Your session expired — please log in again');
+    }
+    return res;
   }
 
   function wireAuthForm() {
@@ -147,5 +167,5 @@ const AuthGuard = (function () {
     }
   }
 
-  return { init };
+  return { init, fetch: authFetch };
 })();
