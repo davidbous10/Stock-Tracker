@@ -87,7 +87,8 @@
       flex-direction: column;
       gap: 10px;
     }
-    .account-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .account-row { display: flex; align-items: center; }
+    .account-avatar-wrap { position: relative; display: inline-flex; }
     .account-avatar {
       width: 32px;
       height: 32px;
@@ -100,15 +101,26 @@
       font-size: 13px;
       color: #0B1220;
       flex-shrink: 0;
+      cursor: default;
     }
     .account-email {
+      position: absolute;
+      left: calc(100% + 10px);
+      top: 50%;
+      transform: translateY(-50%);
+      background: var(--surface-hover);
+      border: 1px solid var(--border);
+      color: var(--text);
       font-size: 12px;
-      color: var(--text-muted);
-      overflow: hidden;
-      text-overflow: ellipsis;
+      padding: 6px 10px;
+      border-radius: 7px;
       white-space: nowrap;
-      min-width: 0;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.12s ease;
+      z-index: 20;
     }
+    .account-avatar-wrap:hover .account-email { opacity: 1; }
     .btn-logout-full {
       display: flex;
       align-items: center;
@@ -735,7 +747,7 @@
     </div>
   </div>
 
-  <div class="app" id="appRoot" style="display:none;">
+  <div class="app" id="appRoot" style="display:none;" data-display="flex">
     <aside class="sidebar">
       <div class="sidebar-brand">
         <img src="/logo.svg" alt="" class="brand-mark" width="32" height="32" />
@@ -762,8 +774,10 @@
 
       <div class="account-block">
         <div class="account-row">
-          <div class="account-avatar" id="accountAvatar">?</div>
-          <div class="account-email" id="accountEmail">Loading…</div>
+          <div class="account-avatar-wrap">
+            <div class="account-avatar" id="accountAvatar">?</div>
+            <div class="account-email" id="accountEmail">Loading…</div>
+          </div>
         </div>
         <button class="btn-logout-full" id="logoutBtn">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -804,7 +818,7 @@
             <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
         </span>
-        <input id="tickerInput" placeholder="Search company or ticker (e.g. Amazon)" autocomplete="off" />
+        <input id="tickerInput" placeholder="Search, or add several: amazon, microsoft, tesla" autocomplete="off" />
         <button class="btn-add" id="addBtn">Add</button>
       </div>
       <div class="suggestions" id="suggestions"></div>
@@ -1200,15 +1214,24 @@
       }
     }
 
-    async function addTickerDirect(ticker, name) {
+    // Adds ONE already-resolved ticker+name pair (used both by the
+    // suggestion-dropdown click, and internally by the multi-ticker
+    // flow below). Returns the server's response data so callers
+    // can tell success from failure without duplicating logic.
+    async function addOneTicker(ticker, name) {
       const res = await fetch('/api/watchlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ticker, name: name || '' })
       });
       const data = await res.json();
+      return { ok: res.ok, data };
+    }
 
-      if (!res.ok) {
+    async function addTickerDirect(ticker, name) {
+      const { ok, data } = await addOneTicker(ticker, name);
+
+      if (!ok) {
         msgEl.textContent = data.error;
         msgEl.className = 'msg error';
         return;
@@ -1222,17 +1245,66 @@
       loadPrices();
     }
 
-    async function addTicker() {
-      const query = input.value.trim();
-      if (!query) return;
-
+    // Resolves a single typed name/ticker (e.g. "amazon" or "MSFT")
+    // into an actual ticker symbol + company name via search,
+    // falling back to treating it as a literal ticker if search
+    // finds nothing.
+    async function resolveQuery(query) {
       const searchRes = await fetch('/api/search?q=' + encodeURIComponent(query));
       const searchData = await searchRes.json();
-
       if (searchData.results && searchData.results[0]) {
-        addTickerDirect(searchData.results[0].symbol, searchData.results[0].name);
+        return { ticker: searchData.results[0].symbol, name: searchData.results[0].name };
+      }
+      return { ticker: query.toUpperCase(), name: null };
+    }
+
+    // Handles the Add button / Enter key. Splits on commas so
+    // "amazon, microsoft, tesla" adds all three in one go — a
+    // single ticker with no comma is just a list of one, so the
+    // normal single-add case flows through the exact same code.
+    async function addTicker() {
+      const raw = input.value.trim();
+      if (!raw) return;
+
+      const queries = raw.split(',').map(s => s.trim()).filter(Boolean);
+      if (queries.length === 0) return;
+
+      const isBatch = queries.length > 1;
+      msgEl.textContent = isBatch ? `Adding ${queries.length} tickers…` : 'Searching…';
+      msgEl.className = 'msg';
+      suggestionsEl.innerHTML = '';
+
+      const added = [];
+      const failed = [];
+
+      // Sequential, not Promise.all: each add depends on knowing the
+      // watchlist's current state (for the "already on your list"
+      // check and for sort_order), so doing these one at a time
+      // avoids two simultaneous inserts racing each other.
+      for (const q of queries) {
+        const { ticker, name } = await resolveQuery(q);
+        const { ok, data } = await addOneTicker(ticker, name);
+        if (ok) {
+          added.push(ticker);
+          items = data.items;
+        } else {
+          failed.push(`${ticker} (${data.error})`);
+        }
+      }
+
+      input.value = '';
+      render();
+      loadPrices();
+
+      if (failed.length === 0) {
+        msgEl.textContent = isBatch ? `Added ${added.join(', ')}` : '';
+        msgEl.className = 'msg';
+      } else if (added.length === 0) {
+        msgEl.textContent = `Couldn't add: ${failed.join(', ')}`;
+        msgEl.className = 'msg error';
       } else {
-        addTickerDirect(query.toUpperCase(), null);
+        msgEl.textContent = `Added ${added.join(', ')}. Skipped: ${failed.join(', ')}`;
+        msgEl.className = 'msg error';
       }
     }
 
@@ -1248,7 +1320,13 @@
 
     input.addEventListener('input', () => {
       clearTimeout(searchTimer);
-      const query = input.value.trim();
+
+      // If the person has typed "amazon, micr", the useful thing to
+      // suggest against is "micr" — the segment they're currently
+      // typing — not the whole string including the finished ones.
+      const segments = input.value.split(',');
+      const query = segments[segments.length - 1].trim();
+
       if (query.length < 2) {
         suggestionsEl.innerHTML = '';
         return;
@@ -1277,7 +1355,23 @@
 
     suggestionsEl.addEventListener('click', e => {
       const item = e.target.closest('.suggestion');
-      if (item) addTickerDirect(item.dataset.symbol, item.dataset.name);
+      if (!item) return;
+
+      const segments = input.value.split(',');
+
+      if (segments.length === 1) {
+        // Only one entry being typed — the common case. Add it
+        // immediately, same as before.
+        addTickerDirect(item.dataset.symbol, item.dataset.name);
+      } else {
+        // Mid-way through a comma list ("amazon, micr|"). Don't
+        // discard "amazon" — just finish this segment with the
+        // chosen ticker and leave the box open to keep adding.
+        segments[segments.length - 1] = ' ' + item.dataset.symbol;
+        input.value = segments.join(',') + ', ';
+        suggestionsEl.innerHTML = '';
+        input.focus();
+      }
     });
 
     document.addEventListener('click', e => {
