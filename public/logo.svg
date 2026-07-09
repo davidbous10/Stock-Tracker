@@ -1,0 +1,14 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>Stock Tracker logo</title>
+  <desc>A navy rounded-square badge containing four ascending bars that transition from red to slate to blue to green, with a small pulsing dot above the tallest bar.</desc>
+
+  <rect x="0" y="0" width="128" height="128" rx="28" fill="#0B1220"/>
+
+  <rect x="24" y="68" width="14" height="20" rx="4" fill="#FF6B6B"/>
+  <rect x="46" y="56" width="14" height="32" rx="4" fill="#7C8AA5"/>
+  <rect x="68" y="44" width="14" height="44" rx="4" fill="#6C8EEF"/>
+  <rect x="90" y="32" width="14" height="56" rx="4" fill="#3DDC97"/>
+
+  <circle cx="97" cy="22" r="4.5" fill="#3DDC97"/>
+  <circle cx="97" cy="22" r="9" fill="none" stroke="#3DDC97" stroke-width="1.6" opacity="0.4"/>
+</svg>
