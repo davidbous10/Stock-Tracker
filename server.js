@@ -303,11 +303,57 @@ app.post('/api/auth/logout', (req, res) => {
   });
 });
 
-app.get('/api/auth/me', (req, res) => {
+app.get('/api/auth/me', async (req, res) => {
   if (!req.session || !req.session.userId) {
     return res.status(401).json({ error: 'Not logged in' });
   }
-  res.json({ email: req.session.userEmail });
+  try {
+    const { rows } = await pool.query('SELECT created_at FROM users WHERE id = $1', [req.session.userId]);
+    res.json({
+      email: req.session.userEmail,
+      createdAt: rows[0] ? rows[0].created_at : null,
+    });
+  } catch (err) {
+    // Even if the extra lookup fails, the person is still legitimately
+    // logged in — don't block that on a non-essential detail.
+    res.json({ email: req.session.userEmail, createdAt: null });
+  }
+});
+
+// ------------------------------------------------------------
+// ROUTE: POST /api/auth/change-password
+// Requires the CURRENT password before allowing a new one — this
+// is what stops someone who's grabbed your unlocked laptop (but
+// doesn't know your password) from locking you out of your own
+// account by just setting a new one.
+// ------------------------------------------------------------
+app.post('/api/auth/change-password', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+
+  const currentPassword = req.body.currentPassword || '';
+  const newPassword = req.body.newPassword || '';
+
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  }
+
+  try {
+    const { rows } = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.session.userId]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    const match = await bcrypt.compare(currentPassword, rows[0].password_hash);
+    if (!match) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, req.session.userId]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // ------------------------------------------------------------
