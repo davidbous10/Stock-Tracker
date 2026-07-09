@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Tracker</title>
+  <link rel="icon" href="/logo.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0B1220;
+      --surface: #131B2E;
+      --surface-hover: #182240;
+      --border: #232E47;
+      --border-soft: #1B2438;
+      --text: #EDF1F7;
+      --text-muted: #7C8AA5;
+      --text-faint: #4E5A75;
+      --accent: #6C8EEF;
+      --up: #3DDC97;
+      --up-bg: #12271F;
+      --down: #FF6B6B;
+      --down-bg: #2B1A1E;
+
+      --font-ui: 'Inter', system-ui, sans-serif;
+      --font-data: 'IBM Plex Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-ui);
+      display: flex;
+      justify-content: center;
+      padding: 40px 24px;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 1080px;
+      margin: 0 auto;
+      display: flex;
+      align-items: flex-start;
+      gap: 32px;
+    }
+
+    .sidebar {
+      width: 220px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+    .sidebar-brand { display: flex; align-items: center; gap: 10px; }
+    .sidebar-title { font-size: 16px; font-weight: 700; }
+    .brand-mark { border-radius: 8px; flex-shrink: 0; }
+
+    .eyebrow {
+      font-family: var(--font-data);
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+
+    .side-nav { display: flex; flex-direction: column; gap: 2px; }
+    .side-nav-link {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-radius: 8px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .side-nav-link svg { flex-shrink: 0; }
+    .side-nav-link:hover { background: var(--surface-hover); color: var(--text); }
+    .side-nav-link.active { background: var(--surface); color: var(--text); }
+
+    .account-block {
+      margin-top: auto;
+      padding-top: 20px;
+      border-top: 1px solid var(--border-soft);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .account-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .account-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-data);
+      font-weight: 700;
+      font-size: 13px;
+      color: #0B1220;
+      flex-shrink: 0;
+    }
+    .account-email {
+      font-size: 12px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .btn-logout-full {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-faint);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: var(--font-ui);
+      cursor: pointer;
+    }
+    .btn-logout-full:hover { border-color: var(--down); color: var(--down); }
+
+    .main-content { flex: 1; min-width: 0; max-width: 480px; }
+
+    @media (max-width: 800px) {
+      .app { flex-direction: column; }
+      .sidebar {
+        width: 100%;
+        position: static;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .side-nav { flex-direction: row; }
+      .account-block {
+        margin-top: 0;
+        padding-top: 0;
+        border-top: none;
+        flex-direction: row;
+      }
+      .account-email { display: none; }
+    }
+
+    /* ---- Auth screen ---- */
+    .auth-screen {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .auth-card {
+      width: 100%;
+      max-width: 360px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px 28px;
+    }
+    .auth-card .brand-row { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+    .auth-card h1 { font-size: 26px; font-weight: 700; }
+    .auth-tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 4px;
+      margin-bottom: 20px;
+    }
+    .auth-tab {
+      flex: 1;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-family: var(--font-ui);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 0;
+      border-radius: 7px;
+      cursor: pointer;
+    }
+    .auth-tab.active { background: var(--surface-hover); color: var(--text); }
+    #authForm { display: flex; flex-direction: column; gap: 10px; }
+    #authForm input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 11px 14px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: var(--font-ui);
+      outline: none;
+    }
+    #authForm input:focus { border-color: var(--accent); }
+    .auth-hint { font-size: 11px; color: var(--text-faint); margin-top: -4px; }
+    .auth-msg { font-size: 13px; color: var(--down); min-height: 16px; }
+    .btn-auth-submit {
+      background: var(--accent);
+      color: #0B1220;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 0;
+      font-size: 14px;
+      font-weight: 700;
+      font-family: var(--font-ui);
+      cursor: pointer;
+      margin-top: 6px;
+    }
+    .btn-auth-submit:hover { opacity: 0.9; }
+    .btn-auth-submit:disabled { opacity: 0.6; cursor: default; }
+
+    /* ---- Settings page ---- */
+    h1.page-title { font-size: 24px; font-weight: 700; margin-bottom: 24px; }
+
+    .settings-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px;
+      margin-bottom: 18px;
+    }
+    .settings-section h2 { font-size: 15px; font-weight: 700; margin-bottom: 3px; }
+    .settings-section .section-desc { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
+
+    .settings-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border-soft);
+      font-size: 13px;
+    }
+    .settings-row:last-child { border-bottom: none; }
+    .settings-row .label { color: var(--text-muted); }
+    .settings-row .value { font-family: var(--font-data); }
+
+    #passwordForm { display: flex; flex-direction: column; gap: 10px; }
+    #passwordForm input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: var(--font-ui);
+      outline: none;
+    }
+    #passwordForm input:focus { border-color: var(--accent); }
+
+    .settings-msg { font-size: 12px; min-height: 16px; }
+    .settings-msg.error { color: var(--down); }
+    .settings-msg.success { color: var(--up); }
+
+    .btn-settings-submit {
+      align-self: flex-start;
+      background: var(--accent);
+      color: #0B1220;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 13px;
+      font-weight: 700;
+      font-family: var(--font-ui);
+      cursor: pointer;
+      margin-top: 4px;
+    }
+    .btn-settings-submit:hover { opacity: 0.9; }
+    .btn-settings-submit:disabled { opacity: 0.6; cursor: default; }
+  </style>
+</head>
+<body>
+  <div class="auth-screen" id="authScreen">
+    <div class="auth-card">
+      <div class="brand-row">
+        <img src="/logo.svg" alt="" class="brand-mark" width="36" height="36" />
+        <div>
+          <div class="eyebrow">Personal terminal</div>
+          <h1>Stock Tracker</h1>
+        </div>
+      </div>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tabLogin">Log in</button>
+        <button class="auth-tab" id="tabSignup">Sign up</button>
+      </div>
+
+      <form id="authForm">
+        <input type="email" id="authEmail" placeholder="Email" autocomplete="email" required />
+        <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password" required />
+        <div class="auth-hint" id="authHint"></div>
+        <div class="auth-msg" id="authMsg"></div>
+        <button type="submit" class="btn-auth-submit" id="authSubmit">Log in</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="app" id="appRoot" style="display:none;">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <img src="/logo.svg" alt="" class="brand-mark" width="32" height="32" />
+        <div>
+          <div class="eyebrow">Personal terminal</div>
+          <div class="sidebar-title">Stock Tracker</div>
+        </div>
+      </div>
+
+      <nav class="side-nav">
+        <a href="/" class="side-nav-link">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          Home
+        </a>
+        <a href="/watchlist.html" class="side-nav-link">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="19" x2="4" y2="10"/><line x1="10" y1="19" x2="10" y2="4"/><line x1="16" y1="19" x2="16" y2="14"/></svg>
+          Watchlist
+        </a>
+        <a href="/settings.html" class="side-nav-link active">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Settings
+        </a>
+      </nav>
+
+      <div class="account-block">
+        <div class="account-row">
+          <div class="account-avatar" id="accountAvatar">?</div>
+          <div class="account-email" id="accountEmail">Loading…</div>
+        </div>
+        <button class="btn-logout-full" id="logoutBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          Log out
+        </button>
+      </div>
+    </aside>
+
+    <div class="main-content">
+      <h1 class="page-title">Settings</h1>
+
+      <div class="settings-section">
+        <h2>Account</h2>
+        <div class="section-desc">Your basic account details</div>
+        <div class="settings-row">
+          <span class="label">Email</span>
+          <span class="value" id="settingsEmail">—</span>
+        </div>
+        <div class="settings-row">
+          <span class="label">Member since</span>
+          <span class="value" id="settingsSince">—</span>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h2>Change password</h2>
+        <div class="section-desc">You'll need your current password to set a new one</div>
+        <form id="passwordForm">
+          <input type="password" id="currentPassword" placeholder="Current password" autocomplete="current-password" required />
+          <input type="password" id="newPassword" placeholder="New password" autocomplete="new-password" required />
+          <input type="password" id="confirmPassword" placeholder="Confirm new password" autocomplete="new-password" required />
+          <div class="settings-msg" id="passwordMsg"></div>
+          <button type="submit" class="btn-settings-submit" id="passwordSubmit">Update password</button>
+        </form>
+      </div>
+
+      <div class="settings-section">
+        <h2>Alerts</h2>
+        <div class="section-desc">
+          Price alerts (set from any stock's bell icon on your Watchlist) are emailed to
+          <strong id="settingsEmailInline">your account email</strong>.
+          Delivery currently requires that address to match the one this app's email
+          sending is verified with — if alerts aren't arriving, that's the most likely reason.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/auth.js"></script>
+  <script>
+    AuthGuard.init(initSettingsPage);
+
+    async function initSettingsPage(email) {
+      document.getElementById('settingsEmail').textContent = email;
+      document.getElementById('settingsEmailInline').textContent = email;
+
+      try {
+        const res = await fetch('/api/auth/me');
+        const data = await res.json();
+        if (res.ok && data.createdAt) {
+          document.getElementById('settingsSince').textContent =
+            new Date(data.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        } else {
+          document.getElementById('settingsSince').textContent = '—';
+        }
+      } catch (err) {
+        document.getElementById('settingsSince').textContent = '—';
+      }
+    }
+
+    document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const currentPassword = document.getElementById('currentPassword').value;
+      const newPassword = document.getElementById('newPassword').value;
+      const confirmPassword = document.getElementById('confirmPassword').value;
+      const msgEl = document.getElementById('passwordMsg');
+      const submitBtn = document.getElementById('passwordSubmit');
+      const form = document.getElementById('passwordForm');
+
+      msgEl.textContent = '';
+      msgEl.className = 'settings-msg';
+
+      if (newPassword !== confirmPassword) {
+        msgEl.textContent = "New passwords don't match";
+        msgEl.className = 'settings-msg error';
+        return;
+      }
+
+      submitBtn.disabled = true;
+
+      try {
+        const res = await fetch('/api/auth/change-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ currentPassword, newPassword }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          msgEl.textContent = data.error;
+          msgEl.className = 'settings-msg error';
+          submitBtn.disabled = false;
+          return;
+        }
+
+        msgEl.textContent = 'Password updated successfully';
+        msgEl.className = 'settings-msg success';
+        form.reset();
+        submitBtn.disabled = false;
+      } catch (err) {
+        msgEl.textContent = 'Could not reach the server';
+        msgEl.className = 'settings-msg error';
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
