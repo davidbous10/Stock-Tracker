@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Stock Tracker</title>
+  <link rel="icon" href="/logo.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
@@ -41,6 +42,17 @@
     .app { width: 100%; max-width: 660px; }
 
     /* ---- Header ---- */
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 2px;
+    }
+    .brand-mark {
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
+
     .eyebrow {
       font-family: var(--font-data);
       font-size: 11px;
@@ -401,8 +413,13 @@
 </head>
 <body>
   <div class="app">
-    <div class="eyebrow">Personal terminal</div>
-    <h1>Stock Tracker</h1>
+    <div class="brand-row">
+      <img src="/logo.svg" alt="" class="brand-mark" width="36" height="36" />
+      <div>
+        <div class="eyebrow">Personal terminal</div>
+        <h1>Stock Tracker</h1>
+      </div>
+    </div>
     <div class="meta-row">
       <div class="meta" id="lastUpdated">not yet loaded</div>
       <button class="refresh-btn" id="refreshBtn">↻ Refresh</button>
