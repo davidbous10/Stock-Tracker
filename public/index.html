@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Stock Tracker</title>
+  <title>Trade Track</title>
   <link rel="icon" href="/logo.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -330,36 +330,61 @@
       grid-column: 1 / -1;
     }
 
+    .mover-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
     .mover-card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-left: 4px solid var(--border);
       border-radius: 14px;
-      padding: 20px;
+      padding: 18px;
+      min-width: 0;
     }
     .mover-card.up { border-left-color: var(--up); }
     .mover-card.down { border-left-color: var(--down); }
+    .mover-label {
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin-bottom: 10px;
+    }
     .mover-ticker {
       font-family: var(--font-data);
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 700;
       letter-spacing: 0.02em;
     }
-    .mover-name { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+    .mover-name {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .mover-price {
       font-family: var(--font-data);
-      font-size: 30px;
+      font-size: 24px;
       font-weight: 700;
-      margin-top: 12px;
+      margin-top: 10px;
     }
     .mover-change {
       font-family: var(--font-data);
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       margin-top: 4px;
     }
     .mover-change.up { color: var(--up); }
     .mover-change.down { color: var(--down); }
+    .mover-empty-inline {
+      font-size: 12px;
+      color: var(--text-faint);
+      padding-top: 4px;
+    }
     .mover-empty {
       background: var(--surface);
       border: 1px dashed var(--border);
@@ -368,6 +393,10 @@
       text-align: center;
       color: var(--text-muted);
       font-size: 14px;
+    }
+
+    @media (max-width: 480px) {
+      .mover-grid { grid-template-columns: 1fr; }
     }
 
     .cta-watchlist {
@@ -384,6 +413,35 @@
     }
     .cta-watchlist:hover { opacity: 0.9; }
 
+    .skeleton {
+      background: linear-gradient(90deg, var(--border-soft) 25%, var(--border) 37%, var(--border-soft) 63%);
+      background-size: 400% 100%;
+      animation: shimmer 1.6s ease infinite;
+      border-radius: 4px;
+    }
+    @keyframes shimmer {
+      0% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .skel-pulse-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      height: 66px;
+    }
+    .skel-line { height: 12px; margin-bottom: 8px; }
+    .skel-mover-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      height: 96px;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .skeleton { animation: none; }
+    }
+
     @media (max-width: 480px) {
       .pulse-grid { grid-template-columns: 1fr; }
     }
@@ -396,7 +454,7 @@
         <img src="/logo.svg" alt="" class="brand-mark" width="36" height="36" />
         <div>
           <div class="eyebrow">Personal terminal</div>
-          <h1>Stock Tracker</h1>
+          <h1>Trade Track</h1>
         </div>
       </div>
 
@@ -421,7 +479,7 @@
         <img src="/logo.svg" alt="" class="brand-mark" width="32" height="32" />
         <div>
           <div class="eyebrow">Personal terminal</div>
-          <div class="sidebar-title">Stock Tracker</div>
+          <div class="sidebar-title">Trade Track</div>
         </div>
       </div>
 
@@ -466,12 +524,17 @@
 
     <div class="section-label">Market pulse</div>
     <div class="pulse-grid" id="pulseGrid">
-      <div class="pulse-error">Loading…</div>
+      <div class="skel-pulse-card"><div class="skeleton skel-line" style="width:50%"></div><div class="skeleton skel-line" style="width:70%;height:18px"></div></div>
+      <div class="skel-pulse-card"><div class="skeleton skel-line" style="width:50%"></div><div class="skeleton skel-line" style="width:70%;height:18px"></div></div>
+      <div class="skel-pulse-card"><div class="skeleton skel-line" style="width:50%"></div><div class="skeleton skel-line" style="width:70%;height:18px"></div></div>
     </div>
 
-    <div class="section-label">Today's biggest mover</div>
+    <div class="section-label">Today's movers</div>
     <div id="moverSpotlight">
-      <div class="mover-empty">Loading…</div>
+      <div class="mover-grid">
+        <div class="skel-mover-card"><div class="skeleton skel-line" style="width:40%"></div><div class="skeleton skel-line" style="width:60%;height:20px"></div></div>
+        <div class="skel-mover-card"><div class="skeleton skel-line" style="width:40%"></div><div class="skeleton skel-line" style="width:60%;height:20px"></div></div>
+      </div>
     </div>
 
     <a href="/watchlist.html" class="cta-watchlist">Go to your Watchlist →</a>
@@ -511,7 +574,7 @@
     async function loadPulse() {
       const grid = document.getElementById('pulseGrid');
       try {
-        const res = await fetch('/api/indexes');
+        const res = await AuthGuard.fetch('/api/indexes');
         const data = await res.json();
 
         if (!res.ok) {
@@ -548,7 +611,10 @@
     async function loadMover() {
       const el = document.getElementById('moverSpotlight');
       try {
-        const [wlRes, pxRes] = await Promise.all([fetch('/api/watchlist'), fetch('/api/prices')]);
+        const [wlRes, pxRes] = await Promise.all([
+          AuthGuard.fetch('/api/watchlist'),
+          AuthGuard.fetch('/api/prices'),
+        ]);
         const wlData = await wlRes.json();
         const pxData = await pxRes.json();
 
@@ -559,24 +625,54 @@
 
         const validQuotes = (pxData.quotes || []).filter(q => !q.error && typeof q.changePercent === 'number');
         if (validQuotes.length === 0) {
-          el.innerHTML = '<div class="mover-empty">Add stocks to your watchlist to see today\u2019s biggest mover here</div>';
+          el.innerHTML = '<div class="mover-empty">Add stocks to your watchlist to see today\u2019s movers here</div>';
           return;
         }
 
-        const biggest = validQuotes.reduce((max, q) =>
-          Math.abs(q.changePercent) > Math.abs(max.changePercent) ? q : max
-        );
+        const nameFor = (ticker) => {
+          const item = (wlData.items || []).find(i => i.ticker === ticker);
+          return item && item.name ? item.name : '';
+        };
 
-        const item = (wlData.items || []).find(i => i.ticker === biggest.ticker);
-        const dir = biggest.changePercent >= 0 ? 'up' : 'down';
-        const sign = biggest.changePercent > 0 ? '+' : '';
+        // Top gainer and top loser are two SEPARATE questions, not
+        // opposite ends of one "biggest mover" — a watchlist that's
+        // all green has no loser to show, and vice versa, so each
+        // card handles its own empty case independently.
+        const gainers = validQuotes.filter(q => q.changePercent > 0);
+        const losers = validQuotes.filter(q => q.changePercent < 0);
+
+        const topGainer = gainers.length
+          ? gainers.reduce((max, q) => q.changePercent > max.changePercent ? q : max)
+          : null;
+        const topLoser = losers.length
+          ? losers.reduce((min, q) => q.changePercent < min.changePercent ? q : min)
+          : null;
+
+        function moverCardHtml(q, dir, label) {
+          if (!q) {
+            return `
+              <div class="mover-card">
+                <div class="mover-label">${esc(label)}</div>
+                <div class="mover-empty-inline">No ${label === 'Top gainer' ? 'gainers' : 'losers'} today</div>
+              </div>
+            `;
+          }
+          const sign = q.changePercent > 0 ? '+' : '';
+          return `
+            <div class="mover-card ${dir}">
+              <div class="mover-label">${esc(label)}</div>
+              <div class="mover-ticker">${esc(q.ticker)}</div>
+              <div class="mover-name">${esc(nameFor(q.ticker))}</div>
+              <div class="mover-price">$${q.price.toFixed(2)}</div>
+              <div class="mover-change ${dir}">${sign}${q.changePercent.toFixed(2)}% today</div>
+            </div>
+          `;
+        }
 
         el.innerHTML = `
-          <div class="mover-card ${dir}">
-            <div class="mover-ticker">${esc(biggest.ticker)}</div>
-            <div class="mover-name">${item && item.name ? esc(item.name) : ''}</div>
-            <div class="mover-price">$${biggest.price.toFixed(2)}</div>
-            <div class="mover-change ${dir}">${sign}${biggest.changePercent.toFixed(2)}% today</div>
+          <div class="mover-grid">
+            ${moverCardHtml(topGainer, 'up', 'Top gainer')}
+            ${moverCardHtml(topLoser, 'down', 'Top loser')}
           </div>
         `;
       } catch (err) {
