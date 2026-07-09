@@ -48,10 +48,106 @@
       gap: 12px;
       margin-bottom: 2px;
     }
+    .brand-row > div:nth-child(2) { flex: 1; }
     .brand-mark {
       border-radius: 8px;
       flex-shrink: 0;
     }
+
+    .btn-logout {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-faint);
+      border-radius: 8px;
+      width: 32px;
+      height: 32px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .btn-logout:hover { border-color: var(--down); color: var(--down); }
+
+    /* ---- Auth screen ---- */
+    .auth-screen {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .auth-card {
+      width: 100%;
+      max-width: 360px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px 28px;
+    }
+    .auth-card .brand-row { margin-bottom: 24px; }
+
+    .auth-tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 4px;
+      margin-bottom: 20px;
+    }
+    .auth-tab {
+      flex: 1;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-family: var(--font-ui);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 0;
+      border-radius: 7px;
+      cursor: pointer;
+    }
+    .auth-tab.active { background: var(--surface-hover); color: var(--text); }
+
+    #authForm { display: flex; flex-direction: column; gap: 10px; }
+    #authForm input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 11px 14px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: var(--font-ui);
+      outline: none;
+    }
+    #authForm input:focus { border-color: var(--accent); }
+
+    .auth-hint {
+      font-size: 11px;
+      color: var(--text-faint);
+      margin-top: -4px;
+    }
+    .auth-msg {
+      font-size: 13px;
+      color: var(--down);
+      min-height: 16px;
+    }
+    .btn-auth-submit {
+      background: var(--accent);
+      color: #0B1220;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 0;
+      font-size: 14px;
+      font-weight: 700;
+      font-family: var(--font-ui);
+      cursor: pointer;
+      margin-top: 6px;
+    }
+    .btn-auth-submit:hover { opacity: 0.9; }
+    .btn-auth-submit:disabled { opacity: 0.6; cursor: default; }
 
     .eyebrow {
       font-family: var(--font-data);
@@ -492,13 +588,45 @@
   </style>
 </head>
 <body>
-  <div class="app">
+  <div class="auth-screen" id="authScreen">
+    <div class="auth-card">
+      <div class="brand-row">
+        <img src="/logo.svg" alt="" class="brand-mark" width="36" height="36" />
+        <div>
+          <div class="eyebrow">Personal terminal</div>
+          <h1>Stock Tracker</h1>
+        </div>
+      </div>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tabLogin">Log in</button>
+        <button class="auth-tab" id="tabSignup">Sign up</button>
+      </div>
+
+      <form id="authForm">
+        <input type="email" id="authEmail" placeholder="Email" autocomplete="email" required />
+        <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password" required />
+        <div class="auth-hint" id="authHint"></div>
+        <div class="auth-msg" id="authMsg"></div>
+        <button type="submit" class="btn-auth-submit" id="authSubmit">Log in</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="app" id="appRoot" style="display:none;">
     <div class="brand-row">
       <img src="/logo.svg" alt="" class="brand-mark" width="36" height="36" />
       <div>
         <div class="eyebrow">Personal terminal</div>
         <h1>Stock Tracker</h1>
       </div>
+      <button class="btn-logout" id="logoutBtn" title="Log out">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+      </button>
     </div>
     <div class="meta-row">
       <div class="meta" id="lastUpdated">not yet loaded</div>
@@ -539,6 +667,97 @@
   </div>
 
   <script>
+    // ============================================================
+    // AUTH — decides whether the person sees the login/signup card
+    // or the actual app. Everything below this block only runs
+    // once we know someone is logged in.
+    // ============================================================
+    const authScreen = document.getElementById('authScreen');
+    const appRoot = document.getElementById('appRoot');
+    const authForm = document.getElementById('authForm');
+    const authEmail = document.getElementById('authEmail');
+    const authPassword = document.getElementById('authPassword');
+    const authHint = document.getElementById('authHint');
+    const authMsg = document.getElementById('authMsg');
+    const authSubmit = document.getElementById('authSubmit');
+    const tabLogin = document.getElementById('tabLogin');
+    const tabSignup = document.getElementById('tabSignup');
+    const logoutBtn = document.getElementById('logoutBtn');
+
+    let authMode = 'login';   // or 'signup'
+
+    function setAuthMode(mode) {
+      authMode = mode;
+      authMsg.textContent = '';
+      tabLogin.classList.toggle('active', mode === 'login');
+      tabSignup.classList.toggle('active', mode === 'signup');
+      authSubmit.textContent = mode === 'login' ? 'Log in' : 'Sign up';
+      authHint.textContent = mode === 'signup' ? 'Password must be at least 8 characters' : '';
+      authPassword.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
+    }
+
+    tabLogin.addEventListener('click', () => setAuthMode('login'));
+    tabSignup.addEventListener('click', () => setAuthMode('signup'));
+
+    authForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      authMsg.textContent = '';
+      authSubmit.disabled = true;
+
+      const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/signup';
+
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: authEmail.value, password: authPassword.value }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          authMsg.textContent = data.error;
+          authSubmit.disabled = false;
+          return;
+        }
+
+        showApp();
+      } catch (err) {
+        authMsg.textContent = 'Could not reach the server';
+        authSubmit.disabled = false;
+      }
+    });
+
+    logoutBtn.addEventListener('click', async () => {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      appRoot.style.display = 'none';
+      authScreen.style.display = 'flex';
+      authForm.reset();
+      authSubmit.disabled = false;
+      setAuthMode('login');
+    });
+
+    function showApp() {
+      authScreen.style.display = 'none';
+      appRoot.style.display = 'block';
+      initApp();   // starts loading watchlist/prices/history/alerts — defined below
+    }
+
+    // On page load, ask the server "am I already logged in?" (the
+    // session cookie, if any, answers this automatically — no
+    // password needs re-entering if it's still valid).
+    (async function checkAuthOnLoad() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          showApp();
+        } else {
+          authScreen.style.display = 'flex';
+        }
+      } catch (err) {
+        authScreen.style.display = 'flex';
+      }
+    })();
+
     const input = document.getElementById('tickerInput');
     const addBtn = document.getElementById('addBtn');
     const refreshBtn = document.getElementById('refreshBtn');
@@ -1116,11 +1335,19 @@
       }
     }
 
-    loadWatchlist();
-    loadAlerts();
-    setInterval(loadPrices, 30000);
-    setInterval(loadHistory, 120000);
-    setInterval(loadAlerts, 120000);
+    // Called once, right after we know someone is logged in — either
+    // immediately (existing session found) or right after they submit
+    // the login/signup form.
+    let appInitialized = false;
+    function initApp() {
+      if (appInitialized) return;   // never double-start the intervals
+      appInitialized = true;
+      loadWatchlist();
+      loadAlerts();
+      setInterval(loadPrices, 30000);
+      setInterval(loadHistory, 120000);
+      setInterval(loadAlerts, 120000);
+    }
   </script>
 </body>
 </html>
