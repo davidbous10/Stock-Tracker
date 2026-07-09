@@ -77,10 +77,23 @@ async function initDb(retries = 10, delayMs = 3000) {
       await pool.query(`ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS name TEXT`);
       await pool.query(`ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS logo TEXT`);
 
+      // MIGRATION: add a "sort_order" column so drag-and-drop reordering
+      // has somewhere to live. For rows that already exist (added before
+      // this feature), backfill their sort_order from their original
+      // added_at order — so nothing visually jumps around the first
+      // time this deploys. New tickers get their sort_order set
+      // explicitly when inserted (see the POST route below).
+      await pool.query(`ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS sort_order INTEGER`);
+      await pool.query(`
+        UPDATE watchlist SET sort_order = sub.rn
+        FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY added_at ASC) AS rn FROM watchlist) sub
+        WHERE watchlist.id = sub.id AND watchlist.sort_order IS NULL
+      `);
+
       const { rows } = await pool.query('SELECT COUNT(*) FROM watchlist');
       if (parseInt(rows[0].count, 10) === 0) {
         await pool.query(
-          `INSERT INTO watchlist (ticker) VALUES ($1), ($2) ON CONFLICT DO NOTHING`,
+          `INSERT INTO watchlist (ticker, sort_order) VALUES ($1, 0), ($2, 1) ON CONFLICT DO NOTHING`,
           ['AAPL', 'NVDA']
         );
       }
@@ -108,7 +121,7 @@ async function initDb(retries = 10, delayMs = 3000) {
 // added before this column existed, or added by raw ticker typed
 // directly rather than picked from search.
 async function getAllWatchlistItems() {
-  const { rows } = await pool.query('SELECT ticker, name, logo FROM watchlist ORDER BY added_at ASC');
+  const { rows } = await pool.query('SELECT ticker, name, logo, sort_order FROM watchlist ORDER BY sort_order ASC');
   return rows;
 }
 
@@ -164,8 +177,12 @@ app.post('/api/watchlist', async (req, res) => {
   const name = suppliedName || profile.name;
 
   try {
+    // New tickers land at the end of the list: their sort_order is
+    // one more than the current highest. COALESCE handles the very
+    // first insert ever, when MAX(sort_order) is NULL (empty table).
     await pool.query(
-      'INSERT INTO watchlist (ticker, name, logo) VALUES ($1, $2, $3)',
+      `INSERT INTO watchlist (ticker, name, logo, sort_order)
+       VALUES ($1, $2, $3, COALESCE((SELECT MAX(sort_order) FROM watchlist), 0) + 1)`,
       [raw, name, profile.logo]
     );
   } catch (err) {
@@ -189,6 +206,48 @@ app.delete('/api/watchlist/:ticker', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Database error' });
   }
+});
+
+// ------------------------------------------------------------
+// ROUTE: POST /api/watchlist/reorder
+// Takes the full new ticker order as an array, e.g.
+// { order: ["NVDA", "AAPL", "GOOG"] }, and rewrites every row's
+// sort_order to match its position in that array.
+//
+// This uses a TRANSACTION: pool.connect() checks out one dedicated
+// connection, BEGIN starts it, and every UPDATE inside either all
+// succeed together (COMMIT) or all get undone together (ROLLBACK)
+// if anything fails partway through. Without this, a crash halfway
+// through updating 5 rows could leave your watchlist in a broken,
+// half-reordered state. With it, reordering is all-or-nothing.
+// ------------------------------------------------------------
+app.post('/api/watchlist/reorder', async (req, res) => {
+  if (!requireDb(res)) return;
+  const order = req.body.order;
+
+  if (!Array.isArray(order) || order.length === 0) {
+    return res.status(400).json({ error: 'order must be a non-empty array of tickers' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (let i = 0; i < order.length; i++) {
+      await client.query(
+        'UPDATE watchlist SET sort_order = $1 WHERE ticker = $2',
+        [i, String(order[i]).toUpperCase()]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    return res.status(500).json({ error: 'Database error' });
+  } finally {
+    client.release();   // always return the connection to the pool
+  }
+
+  const items = await getAllWatchlistItems();
+  res.json({ items });
 });
 
 // ------------------------------------------------------------
