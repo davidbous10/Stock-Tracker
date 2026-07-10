@@ -775,6 +775,136 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
+// ------------------------------------------------------------
+// NEWS — two Finnhub endpoints power the Articles page:
+//   /news?category=general       → broad market headlines
+//   /company-news?symbol=&from=&to= → headlines about ONE company
+//
+// Both routes cache their results in memory for a few minutes.
+// Why: news barely changes minute-to-minute, but every page load
+// would otherwise cost real Finnhub API calls — and the watchlist
+// route makes one call PER TICKER. With, say, 8 tickers, five
+// people refreshing the page a few times could burn through the
+// free tier's 60-calls-per-minute limit for no benefit. A tiny
+// { fetchedAt, data } map fixes that. (This cache lives in the
+// server's memory, so a redeploy clears it — that's fine, it just
+// refetches once.)
+// ------------------------------------------------------------
+const NEWS_CACHE_TTL_MS = 5 * 60 * 1000;   // 5 minutes
+const newsCache = new Map();
+
+function newsCacheGet(key) {
+  const hit = newsCache.get(key);
+  if (hit && Date.now() - hit.fetchedAt < NEWS_CACHE_TTL_MS) return hit.data;
+  return null;
+}
+
+function newsCacheSet(key, data) {
+  newsCache.set(key, { fetchedAt: Date.now(), data });
+}
+
+// Finnhub returns a lot of fields we don't need — trim each article
+// down to exactly what the frontend renders, so the response stays
+// small and the frontend never depends on Finnhub's raw shape.
+function mapArticle(a) {
+  return {
+    headline: a.headline,
+    source: a.source || 'Unknown source',
+    url: a.url,
+    image: a.image || null,
+    summary: a.summary || '',
+    datetime: a.datetime,   // unix timestamp in seconds
+  };
+}
+
+app.get('/api/news/market', requireAuth, async (req, res) => {
+  if (!process.env.FINNHUB_API_KEY) {
+    return res.status(500).json({ error: 'Server is missing FINNHUB_API_KEY' });
+  }
+
+  const cached = newsCacheGet('market');
+  if (cached) return res.json({ articles: cached });
+
+  try {
+    const url = `https://finnhub.io/api/v1/news?category=general&token=${process.env.FINNHUB_API_KEY}`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (!Array.isArray(data)) {
+      return res.status(502).json({ error: 'Unexpected response from news provider' });
+    }
+
+    const articles = data
+      .filter(a => a.headline && a.url)
+      .slice(0, 18)
+      .map(mapArticle);
+
+    newsCacheSet('market', articles);
+    res.json({ articles });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load market news' });
+  }
+});
+
+// Company news for the logged-in user's own tickers, grouped by
+// ticker: { news: { AAPL: [...], NVDA: [...] } }. Capped at the
+// first 10 tickers (by the user's own sort order) — each ticker is
+// its own Finnhub call, and an enormous watchlist shouldn't be able
+// to fire off 50 API calls from one page load.
+const COMPANY_NEWS_MAX_TICKERS = 10;
+const COMPANY_NEWS_PER_TICKER = 4;
+const COMPANY_NEWS_LOOKBACK_DAYS = 7;
+
+app.get('/api/news/watchlist', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  if (!process.env.FINNHUB_API_KEY) {
+    return res.status(500).json({ error: 'Server is missing FINNHUB_API_KEY' });
+  }
+
+  try {
+    const items = await getAllWatchlistItems(req.session.userId);
+    const tickers = items.map(i => i.ticker).slice(0, COMPANY_NEWS_MAX_TICKERS);
+
+    if (tickers.length === 0) {
+      return res.json({ news: {} });
+    }
+
+    // Finnhub wants YYYY-MM-DD date bounds; look back one week.
+    const fmt = (d) => d.toISOString().slice(0, 10);
+    const to = fmt(new Date());
+    const from = fmt(new Date(Date.now() - COMPANY_NEWS_LOOKBACK_DAYS * 24 * 60 * 60 * 1000));
+
+    const news = {};
+    // Deliberately sequential (not Promise.all) — one call at a time
+    // is gentler on the shared rate limit, and with caching most
+    // loads won't reach Finnhub at all.
+    for (const ticker of tickers) {
+      const cacheKey = `company:${ticker}`;
+      let articles = newsCacheGet(cacheKey);
+
+      if (!articles) {
+        try {
+          const url = `https://finnhub.io/api/v1/company-news?symbol=${ticker}&from=${from}&to=${to}&token=${process.env.FINNHUB_API_KEY}`;
+          const response = await fetch(url);
+          const data = await response.json();
+          articles = Array.isArray(data)
+            ? data.filter(a => a.headline && a.url).slice(0, COMPANY_NEWS_PER_TICKER).map(mapArticle)
+            : [];
+          newsCacheSet(cacheKey, articles);
+        } catch (err) {
+          articles = [];   // one ticker failing shouldn't sink the whole page
+        }
+      }
+
+      news[ticker] = articles;
+    }
+
+    res.json({ news });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load watchlist news' });
+  }
+});
+
 app.get('/api/health', async (req, res) => {
   let hasDatabase = false;
   try {
