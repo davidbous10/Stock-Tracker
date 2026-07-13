@@ -1174,6 +1174,13 @@
       downCountEl.textContent = down;
       summaryEl.style.display = 'flex';
 
+      // Update the browser tab: "3↑ 2↓ — Trade Track"
+      if (up + down > 0) {
+        document.title = `${up}↑ ${down}↓ · ${items.length} stocks — Trade Track`;
+      } else {
+        document.title = `${items.length} stocks — Trade Track`;
+      }
+
       listEl.innerHTML = items.map(cardHtml).join('');
     }
 
