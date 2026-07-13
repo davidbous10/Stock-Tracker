@@ -547,6 +547,14 @@
           sending is verified with — if alerts aren't arriving, that's the most likely reason.
         </div>
       </div>
+
+      <div class="settings-section" id="adminSection" style="display:none">
+        <h2>Admin</h2>
+        <div class="section-desc">Only visible to you as the app creator</div>
+        <div id="adminStats">
+          <div class="skeleton skel-line" style="width:40%"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -576,6 +584,33 @@
       } catch (err) {
         document.getElementById('settingsSince').textContent = '—';
       }
+
+      // Admin panel — only loads for the creator (user_id = 1).
+      // If the request returns 403, we just leave the section hidden.
+      try {
+        const adminRes = await AuthGuard.fetch('/api/admin/stats');
+        if (adminRes.ok) {
+          const stats = await adminRes.json();
+          document.getElementById('adminSection').style.display = '';
+          const users = stats.recentSignups || [];
+          document.getElementById('adminStats').innerHTML = `
+            <div class="settings-row">
+              <span class="label">Total users</span>
+              <span class="value">${stats.totalUsers}</span>
+            </div>
+            <div class="settings-row">
+              <span class="label">Distinct tickers tracked</span>
+              <span class="value">${stats.totalDistinctTickers}</span>
+            </div>
+            ${users.map(u => `
+              <div class="settings-row">
+                <span class="label" style="font-size:12px">${u.email}${u.name ? ' (' + u.name + ')' : ''}</span>
+                <span class="value" style="font-size:11px;color:var(--ink-faint)">${new Date(u.joinedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+              </div>
+            `).join('')}
+          `;
+        }
+      } catch (err) {}
     }
 
     document.getElementById('nameForm').addEventListener('submit', async (e) => {
