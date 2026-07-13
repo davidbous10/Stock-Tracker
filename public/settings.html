@@ -439,6 +439,7 @@
       </div>
 
       <form id="authForm">
+        <input type="text" id="authName" placeholder="First name" autocomplete="given-name" style="display:none" />
         <input type="email" id="authEmail" placeholder="Email" autocomplete="email" required />
         <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password" required />
         <div class="auth-hint" id="authHint"></div>
@@ -506,6 +507,10 @@
           <span class="value" id="settingsEmail">—</span>
         </div>
         <div class="settings-row">
+          <span class="label">Name</span>
+          <span class="value" id="settingsName">—</span>
+        </div>
+        <div class="settings-row">
           <span class="label">Member since</span>
           <span class="value" id="settingsSince">—</span>
         </div>
@@ -539,9 +544,10 @@
   <script>
     AuthGuard.init(initSettingsPage);
 
-    async function initSettingsPage(email) {
+    async function initSettingsPage(email, name) {
       document.getElementById('settingsEmail').textContent = email;
       document.getElementById('settingsEmailInline').textContent = email;
+      document.getElementById('settingsName').textContent = name || '—';
 
       try {
         const res = await AuthGuard.fetch('/api/auth/me');
