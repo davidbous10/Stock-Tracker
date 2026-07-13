@@ -559,6 +559,11 @@
       document.getElementById('settingsEmailInline').textContent = email;
       document.getElementById('settingsName').textContent = name || '—';
 
+      // Pre-fill the change name field so the user sees what they have
+      if (name) {
+        document.getElementById('newName').value = name;
+      }
+
       try {
         const res = await AuthGuard.fetch('/api/auth/me');
         const data = await res.json();
