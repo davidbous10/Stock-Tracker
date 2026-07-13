@@ -22,7 +22,7 @@ const AuthGuard = (function () {
   // Same deterministic color-from-text trick used for ticker
   // avatars on the watchlist page, reused here so a person's
   // account initial is always the same color everywhere.
-  const BADGE_COLORS = ['#6C8EEF', '#3DDC97', '#FFB454', '#FF6B6B', '#B892FF', '#4FD1E8'];
+  const BADGE_COLORS = ['#17442F', '#A97F2F', '#8C2F2B', '#2E4056', '#5F6B3C', '#7A4E2D'];
   function colorFor(text) {
     let hash = 0;
     for (let i = 0; i < text.length; i++) hash = text.charCodeAt(i) + ((hash << 5) - hash);
