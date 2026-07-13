@@ -459,13 +459,23 @@
     .suggestion {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 11px 14px;
+      gap: 0;
+      padding: 0;
       cursor: pointer;
       border-bottom: 1px solid var(--rule);
     }
     .suggestion:last-child { border-bottom: none; }
     .suggestion:hover { background: var(--paper-bright); }
+    .s-link {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 11px 14px;
+      flex: 1;
+      min-width: 0;
+      text-decoration: none;
+      color: inherit;
+    }
     .s-symbol {
       font-family: var(--font-data);
       font-weight: 700;
@@ -481,6 +491,19 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .s-add {
+      background: none;
+      border: none;
+      border-left: 1px solid var(--rule);
+      color: var(--ink-faint);
+      font-size: 18px;
+      font-weight: 700;
+      font-family: var(--font-data);
+      padding: 11px 14px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .s-add:hover { color: var(--green); background: var(--up-bg); }
 
     .msg { min-height: 18px; font-size: 13px; margin: -12px 0 14px 4px; color: var(--ink-muted); }
     .msg.error { color: var(--down); }
@@ -1418,30 +1441,40 @@
       }
       suggestionsEl.innerHTML = results.map(r => `
         <div class="suggestion" data-symbol="${esc(r.symbol)}" data-name="${esc(r.name)}">
-          <span class="s-symbol">${esc(r.symbol)}</span>
-          <span class="s-name">${esc(r.name)}</span>
+          <a href="/stock.html?t=${encodeURIComponent(r.symbol)}" class="s-link">
+            <span class="s-symbol">${esc(r.symbol)}</span>
+            <span class="s-name">${esc(r.name)}</span>
+          </a>
+          <button class="s-add" data-symbol="${esc(r.symbol)}" data-name="${esc(r.name)}" title="Add to watchlist">+</button>
         </div>
       `).join('');
     }
 
     suggestionsEl.addEventListener('click', e => {
+      // If they clicked the "+" quick-add button
+      const addBtn = e.target.closest('.s-add');
+      if (addBtn) {
+        e.preventDefault();
+        const segments = input.value.split(',');
+        if (segments.length === 1) {
+          addTickerDirect(addBtn.dataset.symbol, addBtn.dataset.name);
+        } else {
+          segments[segments.length - 1] = ' ' + addBtn.dataset.symbol;
+          input.value = segments.join(',') + ', ';
+          suggestionsEl.innerHTML = '';
+          input.focus();
+        }
+        return;
+      }
+
+      // If they clicked anywhere else on the suggestion row (but not
+      // the link itself — let that navigate naturally), treat it like
+      // clicking the link.
       const item = e.target.closest('.suggestion');
       if (!item) return;
-
-      const segments = input.value.split(',');
-
-      if (segments.length === 1) {
-        // Only one entry being typed — the common case. Add it
-        // immediately, same as before.
-        addTickerDirect(item.dataset.symbol, item.dataset.name);
-      } else {
-        // Mid-way through a comma list ("amazon, micr|"). Don't
-        // discard "amazon" — just finish this segment with the
-        // chosen ticker and leave the box open to keep adding.
-        segments[segments.length - 1] = ' ' + item.dataset.symbol;
-        input.value = segments.join(',') + ', ';
-        suggestionsEl.innerHTML = '';
-        input.focus();
+      const link = item.querySelector('.s-link');
+      if (link && !e.target.closest('.s-link')) {
+        window.location.href = link.href;
       }
     });
 
