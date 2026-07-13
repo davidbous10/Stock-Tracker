@@ -431,6 +431,8 @@
       font-weight: 700;
       letter-spacing: 0.02em;
     }
+    .ticker-link { color: inherit; text-decoration: none; }
+    .ticker-link:hover { color: var(--green-bright); }
     .mover-name {
       font-size: 12px;
       color: var(--ink-muted);
@@ -524,6 +526,7 @@
       </div>
 
       <form id="authForm">
+        <input type="text" id="authName" placeholder="First name" autocomplete="given-name" style="display:none" />
         <input type="email" id="authEmail" placeholder="Email" autocomplete="email" required />
         <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password" required />
         <div class="auth-hint" id="authHint"></div>
@@ -632,14 +635,15 @@
       return 'Good evening';
     }
 
-    function initHomePage(email) {
+    function initHomePage(email, name) {
       document.getElementById('greetingDate').textContent =
         new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
-      // AuthGuard already confirmed we're logged in and knows the
-      // email (it just used it to fill in the sidebar) — reusing it
-      // here means one less network round trip just for a greeting.
-      document.getElementById('greetingText').textContent = `${greetingByHour()}, ${email}`;
+      // Use the person's first name if they gave one at signup;
+      // fall back to email if they didn't (e.g. existing accounts
+      // created before the name field existed).
+      const displayName = name || email;
+      document.getElementById('greetingText').textContent = `${greetingByHour()}, ${displayName}`;
 
       loadPulse();
       loadMover();
@@ -733,7 +737,7 @@
           return `
             <div class="mover-card ${dir}">
               <div class="mover-label">${esc(label)}</div>
-              <div class="mover-ticker">${esc(q.ticker)}</div>
+              <div class="mover-ticker"><a href="/stock.html?t=${encodeURIComponent(q.ticker)}" class="ticker-link">${esc(q.ticker)}</a></div>
               <div class="mover-name">${esc(nameFor(q.ticker))}</div>
               <div class="mover-price">$${q.price.toFixed(2)}</div>
               <div class="mover-change ${dir}">${fmtPct(q.changePercent)} today</div>
