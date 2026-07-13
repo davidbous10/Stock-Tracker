@@ -346,9 +346,10 @@
 
     function fmtNum(n) {
       if (n == null) return '—';
-      if (n >= 1e6) return (n / 1e3).toFixed(0) + 'B';
-      if (n >= 1e3) return (n).toFixed(0) + 'M';
-      return n.toFixed(2);
+      // Finnhub returns marketCap in millions (e.g. 4631217 = $4.63T)
+      if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'T';
+      if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'B';
+      return '$' + n.toFixed(0) + 'M';
     }
 
     function fmtVol(n) {
@@ -390,7 +391,9 @@
         const p = await res.json();
         if (!res.ok) return;
 
-        // Store for stats section
+        // If Finnhub returned an empty profile (unknown ticker), the
+        // name will just be the symbol itself with no industry/exchange.
+        // That's fine — we still show what we can.
         window._profile = p;
         renderHeader(p, null);
         renderStats(null, p);
@@ -401,9 +404,27 @@
       try {
         const res = await AuthGuard.fetch(`/api/stock/${encodeURIComponent(SYMBOL)}/quote`);
         const q = await res.json();
-        if (!res.ok || q.error) return;
+        if (!res.ok || q.error) {
+          // Unknown ticker or Finnhub can't find it
+          const el = document.getElementById('headerArea');
+          if (!window._profile) {
+            el.innerHTML = `
+              <div class="stock-header">
+                <div class="stock-header-top">
+                  <div class="stock-logo-fallback" style="background:${badgeColor(SYMBOL)}">${SYMBOL[0]}</div>
+                  <div class="stock-id">
+                    <div class="stock-symbol">${esc(SYMBOL)}</div>
+                    <div class="stock-name" style="color:var(--down)">No data found for this ticker</div>
+                  </div>
+                </div>
+              </div>`;
+          }
+          document.getElementById('statsArea').innerHTML = '<div class="empty-section">No stats available</div>';
+          return;
+        }
 
         window._quote = q;
+        document.title = `${SYMBOL} $${q.price.toFixed(2)} — Trade Track`;
         renderHeader(window._profile || null, q);
         renderStats(q, window._profile || null);
       } catch (err) {}
