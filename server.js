@@ -376,6 +376,46 @@ app.post('/api/auth/change-name', requireAuth, async (req, res) => {
 });
 
 // ------------------------------------------------------------
+// ROUTE: GET /api/admin/stats
+// Only accessible to user_id = 1 (the creator / first account).
+// Returns signup count and recent signups so you can see how
+// many people are using the app.
+// ------------------------------------------------------------
+app.get('/api/admin/stats', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+
+  if (req.session.userId !== 1) {
+    return res.status(403).json({ error: 'Admin only' });
+  }
+
+  try {
+    const { rows: countRows } = await pool.query('SELECT COUNT(*) FROM users');
+    const total = parseInt(countRows[0].count, 10);
+
+    const { rows: recent } = await pool.query(
+      'SELECT id, email, name, created_at FROM users ORDER BY created_at DESC LIMIT 20'
+    );
+
+    const { rows: tickerCount } = await pool.query(
+      'SELECT COUNT(DISTINCT ticker) FROM watchlist'
+    );
+
+    res.json({
+      totalUsers: total,
+      totalDistinctTickers: parseInt(tickerCount[0].count, 10),
+      recentSignups: recent.map(u => ({
+        id: u.id,
+        email: u.email,
+        name: u.name || null,
+        joinedAt: u.created_at,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// ------------------------------------------------------------
 // WATCHLIST ROUTES — every one now requires login, and every
 // query is scoped to req.session.userId, so what you see is only
 // ever your own list.
