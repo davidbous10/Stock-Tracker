@@ -355,6 +355,27 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
 });
 
 // ------------------------------------------------------------
+// ROUTE: POST /api/auth/change-name
+// Updates the display name shown in greetings and settings.
+// ------------------------------------------------------------
+app.post('/api/auth/change-name', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+
+  const name = (req.body.name || '').trim();
+  if (!name || name.length > 50) {
+    return res.status(400).json({ error: 'Name must be between 1 and 50 characters' });
+  }
+
+  try {
+    await pool.query('UPDATE users SET name = $1 WHERE id = $2', [name, req.session.userId]);
+    req.session.userName = name;
+    res.json({ ok: true, name });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// ------------------------------------------------------------
 // WATCHLIST ROUTES — every one now requires login, and every
 // query is scoped to req.session.userId, so what you see is only
 // ever your own list.
