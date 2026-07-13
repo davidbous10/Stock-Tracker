@@ -524,6 +524,14 @@
     }
     .feed-empty a { color: var(--green); font-weight: 600; }
 
+    .refresh-btn {
+      background: none; border: 1px solid var(--rule-strong);
+      color: var(--ink-muted); border-radius: 2px;
+      padding: 8px 14px; font-size: 12px;
+      font-family: var(--font-ui); font-weight: 600; cursor: pointer;
+    }
+    .refresh-btn:hover { border-color: var(--green); color: var(--ink); }
+
     .skel-featured {
       background: var(--paper-raise);
       border: 1px solid var(--rule);
@@ -623,8 +631,13 @@
     </aside>
 
     <div class="main-content">
-      <div class="page-title">Articles</div>
-      <div class="page-subtitle" id="pageDate"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div class="page-title">Articles</div>
+          <div class="page-subtitle" id="pageDate"></div>
+        </div>
+        <button class="refresh-btn" id="refreshBtn">↻ Refresh</button>
+      </div>
 
       <div class="section-label">Market news</div>
       <div id="marketNews">
@@ -700,6 +713,11 @@
 
       loadMarketNews();
       loadWatchlistNews();
+
+      document.getElementById('refreshBtn').addEventListener('click', () => {
+        loadMarketNews();
+        loadWatchlistNews();
+      });
     }
 
     async function loadMarketNews() {
