@@ -112,6 +112,9 @@ async function initDb(retries = 10, delayMs = 3000) {
         )
       `);
 
+      // MIGRATION: give users a display name for greetings.
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT`);
+
       // MIGRATION: give watchlist and alerts an owner. Existing rows
       // (created back when there was only ever one shared list) get
       // user_id = NULL for now — the very first person to sign up
@@ -216,6 +219,7 @@ app.post('/api/auth/signup', async (req, res) => {
 
   const email = (req.body.email || '').trim().toLowerCase();
   const password = req.body.password || '';
+  const name = (req.body.name || '').trim() || null;
 
   if (!EMAIL_PATTERN.test(email)) {
     return res.status(400).json({ error: 'Please enter a valid email address' });
@@ -225,15 +229,11 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 
   try {
-    // Hashing turns the password into a one-way scrambled string —
-    // we never store (or could even recover) the actual password.
-    // The "10" is the cost factor: how many times to scramble. Higher
-    // is slower but harder to brute-force; 10 is a solid default.
     const passwordHash = await bcrypt.hash(password, 10);
 
     const { rows } = await pool.query(
-      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id',
-      [email, passwordHash]
+      'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id',
+      [email, passwordHash, name]
     );
     const userId = rows[0].id;
 
@@ -241,13 +241,9 @@ app.post('/api/auth/signup', async (req, res) => {
     const isFirstUserEver = parseInt(countRows[0].count, 10) === 1;
 
     if (isFirstUserEver) {
-      // Whoever signs up first inherits whatever was on the shared
-      // list before accounts existed — nobody's existing data
-      // vanishes just because login now exists.
       await pool.query('UPDATE watchlist SET user_id = $1 WHERE user_id IS NULL', [userId]);
       await pool.query('UPDATE alerts SET user_id = $1 WHERE user_id IS NULL', [userId]);
     } else {
-      // Everyone after that starts fresh with a small starter list.
       await pool.query(
         `INSERT INTO watchlist (ticker, sort_order, user_id) VALUES ($1, 0, $3), ($2, 1, $3)`,
         ['AAPL', 'NVDA', userId]
@@ -256,7 +252,8 @@ app.post('/api/auth/signup', async (req, res) => {
 
     req.session.userId = userId;
     req.session.userEmail = email;
-    res.json({ email });
+    req.session.userName = name;
+    res.json({ email, name });
   } catch (err) {
     if (err.code === '23505') {
       return res.status(409).json({ error: 'An account with that email already exists' });
@@ -272,13 +269,8 @@ app.post('/api/auth/login', async (req, res) => {
   const password = req.body.password || '';
 
   try {
-    const { rows } = await pool.query('SELECT id, password_hash FROM users WHERE email = $1', [email]);
+    const { rows } = await pool.query('SELECT id, password_hash, name FROM users WHERE email = $1', [email]);
 
-    // Deliberately the SAME error message whether the email doesn't
-    // exist or the password is wrong. Being specific ("no account
-    // with that email") would let an attacker discover which emails
-    // have accounts here just by trying them — a real, well-known
-    // security leak called a "user enumeration" bug.
     if (rows.length === 0) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
@@ -290,7 +282,8 @@ app.post('/api/auth/login', async (req, res) => {
 
     req.session.userId = rows[0].id;
     req.session.userEmail = email;
-    res.json({ email });
+    req.session.userName = rows[0].name || null;
+    res.json({ email, name: rows[0].name || null });
   } catch (err) {
     res.status(500).json({ error: 'Database error' });
   }
@@ -308,15 +301,14 @@ app.get('/api/auth/me', async (req, res) => {
     return res.status(401).json({ error: 'Not logged in' });
   }
   try {
-    const { rows } = await pool.query('SELECT created_at FROM users WHERE id = $1', [req.session.userId]);
+    const { rows } = await pool.query('SELECT name, created_at FROM users WHERE id = $1', [req.session.userId]);
     res.json({
       email: req.session.userEmail,
+      name: rows[0] ? rows[0].name : null,
       createdAt: rows[0] ? rows[0].created_at : null,
     });
   } catch (err) {
-    // Even if the extra lookup fails, the person is still legitimately
-    // logged in — don't block that on a non-essential detail.
-    res.json({ email: req.session.userEmail, createdAt: null });
+    res.json({ email: req.session.userEmail, name: req.session.userName || null, createdAt: null });
   }
 });
 
@@ -772,6 +764,110 @@ app.get('/api/search', async (req, res) => {
     res.json({ results });
   } catch (err) {
     res.status(500).json({ error: 'Search failed' });
+  }
+});
+
+// ------------------------------------------------------------
+// STOCK DETAIL — endpoints for the single-stock detail page.
+// Each returns data for one ticker, so the page can load them
+// independently and render progressively.
+// ------------------------------------------------------------
+
+// Extended profile: reuses the existing fetchCompanyProfile() but
+// also grabs basic financials (52-week high/low, market cap) from
+// Finnhub's /stock/metric endpoint (available on free tier).
+app.get('/api/stock/:symbol/profile', requireAuth, async (req, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  if (!process.env.FINNHUB_API_KEY) {
+    return res.status(500).json({ error: 'Server is missing FINNHUB_API_KEY' });
+  }
+
+  const cacheKey = `profile:${symbol}`;
+  const cached = newsCacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const profileUrl = `https://finnhub.io/api/v1/stock/profile2?symbol=${symbol}&token=${process.env.FINNHUB_API_KEY}`;
+    const metricUrl = `https://finnhub.io/api/v1/stock/metric?symbol=${symbol}&metric=all&token=${process.env.FINNHUB_API_KEY}`;
+
+    const [profileRes, metricRes] = await Promise.all([
+      fetch(profileUrl).then(r => r.json()).catch(() => ({})),
+      fetch(metricUrl).then(r => r.json()).catch(() => ({})),
+    ]);
+
+    const m = metricRes.metric || {};
+    const profile = {
+      name: profileRes.name || symbol,
+      logo: profileRes.logo || null,
+      industry: profileRes.finnhubIndustry || null,
+      exchange: profileRes.exchange || null,
+      marketCap: profileRes.marketCapitalization || null,
+      weburl: profileRes.weburl || null,
+      ipo: profileRes.ipo || null,
+      weekHigh52: m['52WeekHigh'] || null,
+      weekLow52: m['52WeekLow'] || null,
+      avgVolume: m['10DayAverageTradingVolume'] || null,
+    };
+
+    newsCacheSet(cacheKey, profile);
+    res.json(profile);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load company profile' });
+  }
+});
+
+// Single-ticker quote — thin wrapper around the existing fetchQuote().
+app.get('/api/stock/:symbol/quote', requireAuth, async (req, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  if (!process.env.FINNHUB_API_KEY) {
+    return res.status(500).json({ error: 'Server is missing FINNHUB_API_KEY' });
+  }
+  const quote = await fetchQuote(symbol);
+  res.json(quote);
+});
+
+// Single-ticker news — same logic as the watchlist news route, but
+// returns more articles (8 instead of 4) and covers a longer window.
+app.get('/api/stock/:symbol/news', requireAuth, async (req, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  if (!process.env.FINNHUB_API_KEY) {
+    return res.status(500).json({ error: 'Server is missing FINNHUB_API_KEY' });
+  }
+
+  const cacheKey = `company:detail:${symbol}`;
+  const cached = newsCacheGet(cacheKey);
+  if (cached) return res.json({ articles: cached });
+
+  try {
+    const fmt = (d) => d.toISOString().slice(0, 10);
+    const to = fmt(new Date());
+    const from = fmt(new Date(Date.now() - 14 * 24 * 60 * 60 * 1000));
+    const url = `https://finnhub.io/api/v1/company-news?symbol=${symbol}&from=${from}&to=${to}&token=${process.env.FINNHUB_API_KEY}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    const articles = Array.isArray(data)
+      ? data.filter(a => a.headline && a.url).slice(0, 8).map(mapArticle)
+      : [];
+    newsCacheSet(cacheKey, articles);
+    res.json({ articles });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load company news' });
+  }
+});
+
+// Single-ticker price history from our own snapshots table.
+app.get('/api/stock/:symbol/history', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  const symbol = req.params.symbol.toUpperCase();
+  try {
+    const { rows } = await pool.query(
+      'SELECT price, recorded_at FROM price_history WHERE ticker = $1 ORDER BY recorded_at ASC',
+      [symbol]
+    );
+    const points = rows.map(r => ({ price: parseFloat(r.price), recordedAt: r.recorded_at }));
+    res.json({ points });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
   }
 });
 
