@@ -312,6 +312,8 @@
         </div>
       </div>
 
+      <div id="watchlistAction"></div>
+
       <div id="chartArea">
         <div class="chart-card">
           <div class="chart-label">Price history</div>
@@ -418,15 +420,8 @@
     }
 
     function renderWatchlistButton() {
-      let el = document.getElementById('watchlistAction');
-      if (!el) {
-        // Insert after the header card
-        const header = document.querySelector('.stock-header');
-        if (!header) return;
-        el = document.createElement('div');
-        el.id = 'watchlistAction';
-        header.appendChild(el);
-      }
+      const el = document.getElementById('watchlistAction');
+      if (!el || isOnWatchlist === null) return;
 
       if (isOnWatchlist) {
         el.innerHTML = `
