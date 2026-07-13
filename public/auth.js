@@ -1,27 +1,19 @@
 // ============================================================
 // auth.js — shared login/session logic.
 //
-// Every page in this app (watchlist, home, settings, and future
-// ones like sectors/articles) needs the SAME thing: check if
-// someone's logged in, show a login/signup card if not, wire up
-// logout, and show who's logged in. Rather than copy-pasting that
-// logic into every page's own <script> block, it lives here once.
+// Every page includes the same auth-screen markup (ids:
+// authScreen, authForm, authEmail, authPassword, authName,
+// authHint, authMsg, authSubmit, tabLogin, tabSignup) and
+// sidebar elements (logoutBtn, accountEmail, accountAvatar).
 //
-// This does assume each page's HTML includes the same auth-screen
-// markup (ids: authScreen, authForm, authEmail, authPassword,
-// authHint, authMsg, authSubmit, tabLogin, tabSignup) and, inside
-// the sidebar, a logout button (id: logoutBtn) and optionally
-// #accountEmail / #accountAvatar elements, which this file fills
-// in automatically if present — a page that doesn't have them
-// just doesn't get that piece, nothing breaks either way.
+// The callback passed to init() now receives TWO arguments:
+//   callback(email, name)
+// so pages like Home can greet by first name.
 // ============================================================
 
 const AuthGuard = (function () {
   let onReadyCallback = null;
 
-  // Same deterministic color-from-text trick used for ticker
-  // avatars on the watchlist page, reused here so a person's
-  // account initial is always the same color everywhere.
   const BADGE_COLORS = ['#17442F', '#A97F2F', '#8C2F2B', '#2E4056', '#5F6B3C', '#7A4E2D'];
   function colorFor(text) {
     let hash = 0;
@@ -47,6 +39,7 @@ const AuthGuard = (function () {
     const authHint = document.getElementById('authHint');
     const authPassword = document.getElementById('authPassword');
     const authMsg = document.getElementById('authMsg');
+    const authName = document.getElementById('authName');
 
     authMsg.textContent = '';
     tabLogin.classList.toggle('active', mode === 'login');
@@ -55,14 +48,20 @@ const AuthGuard = (function () {
     authHint.textContent = mode === 'signup' ? 'Password must be at least 8 characters' : '';
     authPassword.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
     authSubmit.dataset.mode = mode;
+
+    // Name field only appears during signup.
+    if (authName) {
+      authName.style.display = mode === 'signup' ? '' : 'none';
+      authName.required = mode === 'signup';
+    }
   }
 
-  function showApp(email) {
+  function showApp(email, name) {
     document.getElementById('authScreen').style.display = 'none';
     const appRoot = document.getElementById('appRoot');
     appRoot.style.display = appRoot.dataset.display || 'block';
     populateAccountInfo(email);
-    if (onReadyCallback) onReadyCallback(email);
+    if (onReadyCallback) onReadyCallback(email, name);
   }
 
   function showLogin(message) {
@@ -75,13 +74,6 @@ const AuthGuard = (function () {
     }
   }
 
-  // Every data call a page makes (loading the watchlist, prices,
-  // alerts, etc.) should go through THIS instead of a bare fetch().
-  // If the session has expired — or was somehow lost mid-use — the
-  // server answers with 401, and instead of leaving the page half
-  // full of "please log in" fragments scattered across different
-  // widgets, this catches it once, in one place, and cleanly bounces
-  // back to the login screen with an explanation.
   async function authFetch(url, options) {
     const res = await fetch(url, options);
     if (res.status === 401) {
@@ -94,6 +86,7 @@ const AuthGuard = (function () {
     const authForm = document.getElementById('authForm');
     const authEmail = document.getElementById('authEmail');
     const authPassword = document.getElementById('authPassword');
+    const authName = document.getElementById('authName');
     const authMsg = document.getElementById('authMsg');
     const authSubmit = document.getElementById('authSubmit');
     const tabLogin = document.getElementById('tabLogin');
@@ -110,11 +103,16 @@ const AuthGuard = (function () {
       const mode = authSubmit.dataset.mode || 'login';
       const endpoint = mode === 'login' ? '/api/auth/login' : '/api/auth/signup';
 
+      const payload = { email: authEmail.value, password: authPassword.value };
+      if (mode === 'signup' && authName) {
+        payload.name = authName.value.trim();
+      }
+
       try {
         const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: authEmail.value, password: authPassword.value }),
+          body: JSON.stringify(payload),
         });
         const data = await res.json();
 
@@ -124,7 +122,7 @@ const AuthGuard = (function () {
           return;
         }
 
-        showApp(data.email);
+        showApp(data.email, data.name || null);
       } catch (err) {
         authMsg.textContent = 'Could not reach the server';
         authSubmit.disabled = false;
@@ -143,12 +141,6 @@ const AuthGuard = (function () {
     }
   }
 
-  // init(callback): call once per page, right when the script
-  // loads. Wires up the login form, checks whether a session
-  // already exists, and either shows the app immediately (existing
-  // session) or shows the login card (none yet). `callback` only
-  // ever fires once we're sure someone's logged in, and receives
-  // the person's email as its argument.
   async function init(callback) {
     onReadyCallback = callback;
     wireAuthForm();
@@ -158,7 +150,7 @@ const AuthGuard = (function () {
       const res = await fetch('/api/auth/me');
       const data = await res.json();
       if (res.ok) {
-        showApp(data.email);
+        showApp(data.email, data.name || null);
       } else {
         showLogin();
       }
