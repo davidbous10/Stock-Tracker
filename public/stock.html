@@ -197,6 +197,22 @@
     .stock-link { color: var(--green); font-weight: 600; text-decoration: none; font-size: 12px; }
     .stock-link:hover { text-decoration: underline; }
 
+    .stock-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+    .btn-watchlist {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--green); color: #F3EEDF;
+      border: none; border-radius: 2px;
+      padding: 9px 16px; font-size: 12px; font-weight: 700;
+      letter-spacing: 0.04em; text-transform: uppercase;
+      font-family: var(--font-ui); cursor: pointer;
+    }
+    .btn-watchlist:hover { background: var(--green-bright); }
+    .btn-watchlist.on-list {
+      background: transparent; color: var(--ink-muted);
+      border: 1px solid var(--rule-strong);
+    }
+    .btn-watchlist.on-list:hover { border-color: var(--down); color: var(--down); }
+
     @media (max-width: 480px) {
       .stock-header-top { flex-direction: column; }
       .stock-price-block { text-align: left; }
@@ -383,6 +399,71 @@
       loadQuote();
       loadChart();
       loadNews();
+      checkWatchlist();
+    }
+
+    // Is this ticker on the user's watchlist? Drives the add/remove button.
+    let isOnWatchlist = null;
+
+    async function checkWatchlist() {
+      try {
+        const res = await AuthGuard.fetch('/api/watchlist');
+        const data = await res.json();
+        if (res.ok) {
+          const tickers = (data.items || []).map(i => i.ticker);
+          isOnWatchlist = tickers.includes(SYMBOL);
+          renderWatchlistButton();
+        }
+      } catch (err) {}
+    }
+
+    function renderWatchlistButton() {
+      let el = document.getElementById('watchlistAction');
+      if (!el) {
+        // Insert after the header card
+        const header = document.querySelector('.stock-header');
+        if (!header) return;
+        el = document.createElement('div');
+        el.id = 'watchlistAction';
+        header.appendChild(el);
+      }
+
+      if (isOnWatchlist) {
+        el.innerHTML = `
+          <div class="stock-actions">
+            <button class="btn-watchlist on-list" onclick="toggleWatchlist()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              On your watchlist
+            </button>
+          </div>`;
+      } else {
+        el.innerHTML = `
+          <div class="stock-actions">
+            <button class="btn-watchlist" onclick="toggleWatchlist()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add to watchlist
+            </button>
+          </div>`;
+      }
+    }
+
+    async function toggleWatchlist() {
+      if (isOnWatchlist === null) return;
+      try {
+        if (isOnWatchlist) {
+          await AuthGuard.fetch(`/api/watchlist/${encodeURIComponent(SYMBOL)}`, { method: 'DELETE' });
+          isOnWatchlist = false;
+        } else {
+          const name = (window._profile && window._profile.name) || null;
+          await AuthGuard.fetch('/api/watchlist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticker: SYMBOL, name }),
+          });
+          isOnWatchlist = true;
+        }
+        renderWatchlistButton();
+      } catch (err) {}
     }
 
     async function loadProfile() {
