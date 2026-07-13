@@ -517,6 +517,16 @@
       </div>
 
       <div class="settings-section">
+        <h2>Change name</h2>
+        <div class="section-desc">This is how you'll be greeted on the home page</div>
+        <form id="nameForm">
+          <input type="text" id="newName" placeholder="First name" autocomplete="given-name" required />
+          <div class="settings-msg" id="nameMsg"></div>
+          <button type="submit" class="btn-settings-submit" id="nameSubmit">Update name</button>
+        </form>
+      </div>
+
+      <div class="settings-section">
         <h2>Change password</h2>
         <div class="section-desc">You'll need your current password to set a new one</div>
         <form id="passwordForm">
@@ -562,6 +572,44 @@
         document.getElementById('settingsSince').textContent = '—';
       }
     }
+
+    document.getElementById('nameForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const nameMsg = document.getElementById('nameMsg');
+      const nameSubmit = document.getElementById('nameSubmit');
+      const newName = document.getElementById('newName').value.trim();
+      nameMsg.textContent = '';
+
+      if (!newName) {
+        nameMsg.textContent = 'Please enter a name';
+        nameMsg.className = 'settings-msg error';
+        return;
+      }
+
+      nameSubmit.disabled = true;
+      try {
+        const res = await AuthGuard.fetch('/api/auth/change-name', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newName }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          nameMsg.textContent = data.error || 'Something went wrong';
+          nameMsg.className = 'settings-msg error';
+        } else {
+          nameMsg.textContent = 'Name updated!';
+          nameMsg.className = 'settings-msg success';
+          document.getElementById('settingsName').textContent = newName;
+          document.getElementById('newName').value = '';
+        }
+      } catch (err) {
+        nameMsg.textContent = 'Could not reach the server';
+        nameMsg.className = 'settings-msg error';
+      }
+      nameSubmit.disabled = false;
+    });
 
     document.getElementById('passwordForm').addEventListener('submit', async (e) => {
       e.preventDefault();
