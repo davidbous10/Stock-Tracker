@@ -374,7 +374,11 @@
       box-shadow: var(--shadow-paper);
       border-top: 3px solid var(--idx-color, var(--brass));
       padding: 14px 16px 14px 26px;
+      text-decoration: none;
+      color: inherit;
+      display: block;
     }
+    .pulse-card:hover { border-color: var(--brass-soft); }
     .pulse-label {
       font-size: 11px;
       font-weight: 600;
@@ -665,19 +669,19 @@
         grid.innerHTML = data.indexes.map(idx => {
           if (idx.error) {
             return `
-              <div class="pulse-card" style="--idx-color:${colorVar[idx.ticker] || 'var(--brass)'}">
+              <a href="/stock.html?t=${encodeURIComponent(idx.ticker)}" class="pulse-card" style="--idx-color:${colorVar[idx.ticker] || 'var(--brass)'}">
                 <div class="pulse-label">${esc(idx.label)}</div>
                 <div class="pulse-error-text">${esc(idx.error)}</div>
-              </div>
+              </a>
             `;
           }
           const dir = idx.changePercent > 0 ? 'up' : idx.changePercent < 0 ? 'down' : 'flat';
           return `
-            <div class="pulse-card" style="--idx-color:${colorVar[idx.ticker] || 'var(--brass)'}">
+            <a href="/stock.html?t=${encodeURIComponent(idx.ticker)}" class="pulse-card" style="--idx-color:${colorVar[idx.ticker] || 'var(--brass)'}">
               <div class="pulse-label">${esc(idx.label)}</div>
               <div class="pulse-price">$${idx.price.toFixed(2)}</div>
               <div class="pulse-change ${dir}">${fmtPct(idx.changePercent)}</div>
-            </div>
+            </a>
           `;
         }).join('');
       } catch (err) {
