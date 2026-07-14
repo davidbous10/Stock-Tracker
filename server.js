@@ -1215,6 +1215,107 @@ app.delete('/api/saved-articles', requireAuth, async (req, res) => {
   }
 });
 
+// ------------------------------------------------------------
+// AI CHAT — the Trade Track assistant. Gathers the user's live
+// watchlist, prices, and alerts, packages them as context, and
+// sends the conversation to the Anthropic API. The assistant
+// knows about this user's actual portfolio, not just generic
+// market knowledge.
+// ------------------------------------------------------------
+app.post('/api/chat', requireAuth, async (req, res) => {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(500).json({ error: 'AI assistant is not configured — add ANTHROPIC_API_KEY in Railway' });
+  }
+  if (!requireDb(res)) return;
+
+  const { messages } = req.body;
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: 'No messages provided' });
+  }
+
+  // Limit conversation length to avoid token blowup
+  const trimmed = messages.slice(-20);
+
+  try {
+    // Gather this user's live context
+    const items = await getAllWatchlistItems(req.session.userId);
+    const tickers = items.map(i => i.ticker);
+
+    let watchlistContext = 'User has no stocks on their watchlist.';
+    if (tickers.length > 0) {
+      const quotes = await Promise.all(tickers.slice(0, 15).map(t => fetchQuote(t)));
+      watchlistContext = 'User\'s watchlist (with live prices):\n' +
+        quotes.map(q => {
+          if (q.error) return `- ${q.ticker}: data unavailable`;
+          const dir = q.changePercent > 0 ? '+' : '';
+          return `- ${q.ticker}: $${q.price.toFixed(2)} (${dir}${q.changePercent.toFixed(2)}% today, range $${q.dayLow.toFixed(2)}-$${q.dayHigh.toFixed(2)})`;
+        }).join('\n');
+    }
+
+    // Alerts
+    let alertsContext = '';
+    try {
+      const { rows: alerts } = await pool.query(
+        'SELECT ticker, condition_type, threshold, fired FROM alerts WHERE user_id = $1',
+        [req.session.userId]
+      );
+      if (alerts.length > 0) {
+        alertsContext = '\n\nUser\'s active alerts:\n' +
+          alerts.map(a => `- ${a.ticker}: ${a.condition_type} ${a.threshold}${a.fired ? ' (already fired)' : ''}`).join('\n');
+      }
+    } catch (err) {}
+
+    const userName = req.session.userName || req.session.userEmail;
+
+    const systemPrompt = `You are the Trade Track AI assistant — a knowledgeable, concise stock market companion built into a personal stock tracking app.
+
+The user's name is ${userName}.
+
+${watchlistContext}${alertsContext}
+
+Guidelines:
+- Be concise and direct. Short paragraphs, not walls of text.
+- Reference the user's actual watchlist data when relevant — you have their live prices above.
+- For questions about specific stocks, use the price data you have. If they ask about a stock NOT on their watchlist, say what you know but note you don't have live data for it.
+- You can suggest stocks to look into, explain market concepts, analyze trends from the data shown, and give general market perspective.
+- Always include a brief disclaimer when giving anything that could be read as investment advice — you're an AI assistant, not a financial advisor.
+- Keep responses under 200 words unless the question clearly needs more depth.
+- Use plain language. No jargon without explanation.`;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: trimmed,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('Anthropic API error:', data);
+      return res.status(502).json({ error: 'AI service error — try again in a moment' });
+    }
+
+    const reply = data.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('\n');
+
+    res.json({ reply });
+  } catch (err) {
+    console.error('Chat error:', err.message);
+    res.status(500).json({ error: 'Something went wrong — try again' });
+  }
+});
+
 app.get('/api/health', async (req, res) => {
   let hasDatabase = false;
   try {
