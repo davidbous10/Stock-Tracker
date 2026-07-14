@@ -300,6 +300,11 @@
       } else {
         addMessage('assistant', data.reply);
         history.push({ role: 'assistant', content: data.reply });
+
+        // If the AI added or removed a stock, refresh the page data
+        if (data.watchlistChanged) {
+          refreshPageData();
+        }
       }
     } catch (err) {
       hideTyping();
@@ -309,5 +314,23 @@
     isSending = false;
     sendBtn.disabled = false;
     inputEl.focus();
+  }
+  // When the AI adds/removes a stock, refresh the current page's
+  // data so the user sees the change without manually reloading.
+  function refreshPageData() {
+    // Small delay so the confirmation message renders first
+    setTimeout(() => {
+      const path = window.location.pathname;
+      if (path.includes('watchlist')) {
+        // Watchlist page has these global functions
+        if (typeof loadWatchlist === 'function') loadWatchlist();
+        if (typeof loadPrices === 'function') loadPrices();
+      } else if (path === '/' || path.includes('index')) {
+        if (typeof loadPulse === 'function') loadPulse();
+        if (typeof loadMover === 'function') loadMover();
+      } else if (path.includes('stock')) {
+        if (typeof checkWatchlist === 'function') checkWatchlist();
+      }
+    }, 500);
   }
 })();
