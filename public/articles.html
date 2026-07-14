@@ -524,6 +524,30 @@
     }
     .feed-empty a { color: var(--green); font-weight: 600; }
 
+    .btn-save {
+      background: none; border: none; color: var(--ink-faint);
+      cursor: pointer; padding: 4px; flex-shrink: 0; border-radius: 2px;
+    }
+    .btn-save:hover { color: var(--brass); }
+    .btn-save.saved { color: var(--brass); }
+
+    .featured-card { position: relative; }
+    .featured-card .btn-save { position: absolute; top: 10px; right: 10px; }
+    .news-card { position: relative; }
+    .news-card .btn-save { position: absolute; top: 8px; right: 8px; }
+    .ticker-article { position: relative; }
+    .ticker-article .btn-save { position: absolute; top: 10px; right: 0; }
+
+    .saved-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 0; border-bottom: 1px solid var(--rule);
+    }
+    .saved-item:last-child { border-bottom: none; }
+    .saved-item-body { flex: 1; min-width: 0; }
+    .saved-item-link { text-decoration: none; color: inherit; }
+    .saved-item-link:hover .saved-item-headline { color: var(--green-bright); }
+    .saved-item-headline { font-size: 13px; font-weight: 600; line-height: 1.4; }
+
     .refresh-btn {
       background: none; border: 1px solid var(--rule-strong);
       color: var(--ink-muted); border-radius: 2px;
@@ -606,6 +630,10 @@
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
           Articles
         </a>
+        <a href="/sectors.html" class="side-nav-link">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          Sectors
+        </a>
         <a href="/settings.html" class="side-nav-link">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           Settings
@@ -662,6 +690,11 @@
           <div class="skeleton skel-line" style="width:60%"></div>
         </div>
       </div>
+
+      <div class="section-label">Saved</div>
+      <div id="savedArticles">
+        <div class="feed-empty">Loading saved articles…</div>
+      </div>
     </div>
   </div>
 
@@ -675,9 +708,6 @@
       return div.innerHTML;
     }
 
-    // Turns a unix timestamp (in seconds — Finnhub's format) into a
-    // short human phrase like "2h ago". Falls back to a plain date
-    // once it's more than a week old.
     function timeAgo(unixSeconds) {
       if (!unixSeconds) return '';
       const diffMs = Date.now() - unixSeconds * 1000;
@@ -691,33 +721,51 @@
       return new Date(unixSeconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     }
 
-    // Image URLs come from dozens of different news sites, and some
-    // of them are broken or blocked. onerror removes the <img> so a
-    // dead link degrades to a clean text-only card instead of a
-    // browser's broken-image icon.
     const IMG_FALLBACK = `onerror="this.remove()"`;
 
     function metaHtml(article) {
-      return `
-        <div class="news-meta">
-          <span class="src">${esc(article.source)}</span>
-          <span class="dot">·</span>
-          <span class="when">${esc(timeAgo(article.datetime))}</span>
-        </div>
-      `;
+      return `<div class="news-meta"><span class="src">${esc(article.source)}</span><span class="dot">·</span><span class="when">${esc(timeAgo(article.datetime))}</span></div>`;
     }
 
-    function initArticlesPage() {
+    let savedUrls = new Set();
+
+    function saveBtn(a) {
+      const saved = savedUrls.has(a.url);
+      return `<button class="btn-save ${saved ? 'saved' : ''}" data-url="${esc(a.url)}" data-headline="${esc(a.headline)}" data-source="${esc(a.source)}" data-datetime="${a.datetime || ''}" onclick="toggleSave(event, this)" title="${saved ? 'Unsave' : 'Save'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="${saved ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>`;
+    }
+
+    async function toggleSave(e, btn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const url = btn.dataset.url;
+      try {
+        if (savedUrls.has(url)) {
+          await AuthGuard.fetch('/api/saved-articles', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+          savedUrls.delete(url);
+        } else {
+          await AuthGuard.fetch('/api/saved-articles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, headline: btn.dataset.headline, source: btn.dataset.source, datetime: btn.dataset.datetime ? parseInt(btn.dataset.datetime) : null }) });
+          savedUrls.add(url);
+        }
+        const saved = savedUrls.has(url);
+        btn.className = 'btn-save ' + (saved ? 'saved' : '');
+        btn.querySelector('svg').setAttribute('fill', saved ? 'currentColor' : 'none');
+        btn.title = saved ? 'Unsave' : 'Save';
+        loadSavedArticles();
+      } catch (err) {}
+    }
+
+    async function initArticlesPage() {
       document.getElementById('pageDate').textContent =
         new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-
+      try {
+        const res = await AuthGuard.fetch('/api/saved-articles');
+        const data = await res.json();
+        if (res.ok) savedUrls = new Set((data.articles || []).map(a => a.url));
+      } catch (err) {}
       loadMarketNews();
       loadWatchlistNews();
-
-      document.getElementById('refreshBtn').addEventListener('click', () => {
-        loadMarketNews();
-        loadWatchlistNews();
-      });
+      loadSavedArticles();
+      document.getElementById('refreshBtn').addEventListener('click', () => { loadMarketNews(); loadWatchlistNews(); });
     }
 
     async function loadMarketNews() {
@@ -725,22 +773,10 @@
       try {
         const res = await AuthGuard.fetch('/api/news/market');
         const data = await res.json();
-
-        if (!res.ok) {
-          el.innerHTML = `<div class="feed-empty">${esc(data.error || 'Could not load market news')}</div>`;
-          return;
-        }
-
+        if (!res.ok) { el.innerHTML = `<div class="feed-empty">${esc(data.error || 'Could not load market news')}</div>`; return; }
         const articles = data.articles || [];
-        if (articles.length === 0) {
-          el.innerHTML = '<div class="feed-empty">No market news available right now</div>';
-          return;
-        }
-
-        // First article gets the big featured treatment; the rest
-        // flow into a two-column grid of compact cards.
+        if (articles.length === 0) { el.innerHTML = '<div class="feed-empty">No market news available right now</div>'; return; }
         const [featured, ...rest] = articles;
-
         const featuredHtml = `
           <a class="featured-card" href="${esc(featured.url)}" target="_blank" rel="noopener">
             ${featured.image ? `<img class="featured-img" src="${esc(featured.image)}" alt="" ${IMG_FALLBACK} />` : ''}
@@ -749,9 +785,8 @@
               <div class="featured-headline">${esc(featured.headline)}</div>
               ${featured.summary ? `<div class="featured-summary">${esc(featured.summary)}</div>` : ''}
             </div>
-          </a>
-        `;
-
+            ${saveBtn(featured)}
+          </a>`;
         const gridHtml = rest.map(a => `
           <a class="news-card" href="${esc(a.url)}" target="_blank" rel="noopener">
             ${a.image ? `<img class="news-thumb" src="${esc(a.image)}" alt="" ${IMG_FALLBACK} />` : ''}
@@ -759,46 +794,24 @@
               ${metaHtml(a)}
               <div class="news-headline">${esc(a.headline)}</div>
             </div>
+            ${saveBtn(a)}
           </a>
         `).join('');
-
         el.innerHTML = featuredHtml + `<div class="news-grid">${gridHtml}</div>`;
-      } catch (err) {
-        el.innerHTML = '<div class="feed-empty">Could not reach the server</div>';
-      }
+      } catch (err) { el.innerHTML = '<div class="feed-empty">Could not reach the server</div>'; }
     }
 
     async function loadWatchlistNews() {
       const el = document.getElementById('watchlistNews');
       try {
-        // The news comes back keyed by ticker; the watchlist call
-        // runs alongside it purely to show each company's full name
-        // next to its symbol (the news route doesn't return names).
-        const [newsRes, wlRes] = await Promise.all([
-          AuthGuard.fetch('/api/news/watchlist'),
-          AuthGuard.fetch('/api/watchlist'),
-        ]);
+        const [newsRes, wlRes] = await Promise.all([AuthGuard.fetch('/api/news/watchlist'), AuthGuard.fetch('/api/watchlist')]);
         const newsData = await newsRes.json();
         const wlData = await wlRes.json();
-
-        if (!newsRes.ok) {
-          el.innerHTML = `<div class="feed-empty">${esc(newsData.error || 'Could not load watchlist news')}</div>`;
-          return;
-        }
-
+        if (!newsRes.ok) { el.innerHTML = `<div class="feed-empty">${esc(newsData.error || 'Could not load watchlist news')}</div>`; return; }
         const news = newsData.news || {};
         const tickers = Object.keys(news);
-
-        if (tickers.length === 0) {
-          el.innerHTML = '<div class="feed-empty">Add stocks on your <a href="/watchlist.html">Watchlist</a> to see news about them here</div>';
-          return;
-        }
-
-        const nameFor = (ticker) => {
-          const item = ((wlRes.ok && wlData.items) || []).find(i => i.ticker === ticker);
-          return item && item.name ? item.name : '';
-        };
-
+        if (tickers.length === 0) { el.innerHTML = '<div class="feed-empty">Add stocks on your <a href="/watchlist.html">Watchlist</a> to see news about them here</div>'; return; }
+        const nameFor = (ticker) => { const item = ((wlRes.ok && wlData.items) || []).find(i => i.ticker === ticker); return item && item.name ? item.name : ''; };
         el.innerHTML = tickers.map(ticker => {
           const articles = news[ticker] || [];
           const rows = articles.length
@@ -806,23 +819,33 @@
                 <a class="ticker-article" href="${esc(a.url)}" target="_blank" rel="noopener">
                   ${metaHtml(a)}
                   <div class="ticker-article-headline">${esc(a.headline)}</div>
-                </a>
-              `).join('')
+                  ${saveBtn(a)}
+                </a>`).join('')
             : '<div class="ticker-no-news">No news in the past week</div>';
-
-          return `
-            <div class="ticker-group">
-              <div class="ticker-group-head">
-                <div class="ticker-group-symbol">${esc(ticker)}</div>
-                <div class="ticker-group-name">${esc(nameFor(ticker))}</div>
-              </div>
-              ${rows}
-            </div>
-          `;
+          return `<div class="ticker-group"><div class="ticker-group-head"><div class="ticker-group-symbol">${esc(ticker)}</div><div class="ticker-group-name">${esc(nameFor(ticker))}</div></div>${rows}</div>`;
         }).join('');
-      } catch (err) {
-        el.innerHTML = '<div class="feed-empty">Could not reach the server</div>';
-      }
+      } catch (err) { el.innerHTML = '<div class="feed-empty">Could not reach the server</div>'; }
+    }
+
+    async function loadSavedArticles() {
+      const el = document.getElementById('savedArticles');
+      try {
+        const res = await AuthGuard.fetch('/api/saved-articles');
+        const data = await res.json();
+        const articles = data.articles || [];
+        if (articles.length === 0) { el.innerHTML = '<div class="feed-empty">Bookmark articles with the 🔖 icon to find them here later</div>'; return; }
+        el.innerHTML = articles.map(a => `
+          <div class="saved-item">
+            <a class="saved-item-link" href="${esc(a.url)}" target="_blank" rel="noopener">
+              <div class="saved-item-body">
+                ${a.source ? `<div class="news-meta"><span class="src">${esc(a.source)}</span><span class="dot">·</span><span class="when">${esc(timeAgo(a.datetime))}</span></div>` : ''}
+                <div class="saved-item-headline">${esc(a.headline)}</div>
+              </div>
+            </a>
+            <button class="btn-save saved" data-url="${esc(a.url)}" data-headline="${esc(a.headline)}" data-source="${esc(a.source || '')}" data-datetime="${a.datetime || ''}" onclick="toggleSave(event, this)" title="Unsave"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
+          </div>
+        `).join('');
+      } catch (err) { el.innerHTML = '<div class="feed-empty">Could not load saved articles</div>'; }
     }
   </script>
 </body>
