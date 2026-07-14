@@ -651,6 +651,9 @@
 
       loadPulse();
       loadMover();
+
+      // Auto-refresh every 30 seconds, same as the watchlist
+      setInterval(() => { loadPulse(); loadMover(); }, 30000);
     }
 
     async function loadPulse() {
