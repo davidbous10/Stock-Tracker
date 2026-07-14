@@ -932,6 +932,49 @@ app.get('/api/stock/:symbol/history', requireAuth, async (req, res) => {
   }
 });
 
+// Analyst recommendations from Finnhub — returns the most recent
+// month's buy/sell/hold/strongBuy/strongSell consensus. Cached
+// because this data only changes monthly.
+app.get('/api/stock/:symbol/recommendation', requireAuth, async (req, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  if (!process.env.FINNHUB_API_KEY) {
+    return res.status(500).json({ error: 'Server is missing FINNHUB_API_KEY' });
+  }
+
+  const cacheKey = `rec:${symbol}`;
+  const cached = newsCacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const url = `https://finnhub.io/api/v1/stock/recommendation?symbol=${symbol}&token=${process.env.FINNHUB_API_KEY}`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (!Array.isArray(data) || data.length === 0) {
+      const empty = { available: false };
+      newsCacheSet(cacheKey, empty);
+      return res.json(empty);
+    }
+
+    // Most recent month's consensus
+    const latest = data[0];
+    const result = {
+      available: true,
+      period: latest.period,
+      strongBuy: latest.strongBuy || 0,
+      buy: latest.buy || 0,
+      hold: latest.hold || 0,
+      sell: latest.sell || 0,
+      strongSell: latest.strongSell || 0,
+    };
+
+    newsCacheSet(cacheKey, result);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load recommendations' });
+  }
+});
+
 // ------------------------------------------------------------
 // NEWS — two Finnhub endpoints power the Articles page:
 //   /news?category=general       → broad market headlines
