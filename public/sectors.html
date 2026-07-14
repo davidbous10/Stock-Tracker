@@ -350,38 +350,274 @@
     }
     @media (prefers-reduced-motion: reduce) {
       .skeleton { animation: none; }
-
-    /* ---- Sectors page ---- */
-    .page-title { font-family: var(--font-display); font-size: 24px; }
-    .page-subtitle { font-family: var(--font-data); font-size: 13px; color: var(--ink-muted); margin-top: 4px; }
-    .refresh-btn { background: none; border: 1px solid var(--rule-strong); color: var(--ink-muted); border-radius: 2px; padding: 8px 14px; font-size: 12px; font-family: var(--font-ui); font-weight: 600; cursor: pointer; }
-    .refresh-btn:hover { border-color: var(--green); color: var(--ink); }
-    .sector-list { display: flex; flex-direction: column; gap: 8px; }
-    .sector-card {
-      display: flex; align-items: center; gap: 16px;
-      background: var(--paper-raise) linear-gradient(var(--margin-red), var(--margin-red)) no-repeat 15px 0 / 1px 100%;
-      border: 1px solid var(--rule-strong); border-radius: 3px; box-shadow: var(--shadow-paper);
-      padding: 16px 20px 16px 28px; text-decoration: none; color: inherit;
     }
-    .sector-card:hover { border-color: var(--brass-soft); }
-    .sector-rank { font-family: var(--font-data); font-size: 12px; font-weight: 700; color: var(--ink-faint); width: 22px; text-align: center; flex-shrink: 0; }
-    .sector-bar-wrap { flex: 1; min-width: 0; }
-    .sector-name { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
-    .sector-ticker { font-family: var(--font-data); font-size: 11px; color: var(--ink-faint); margin-left: 8px; }
-    .sector-bar-track { height: 18px; background: var(--paper-sunken); border-radius: 2px; position: relative; overflow: hidden; }
-    .sector-bar-fill { position: absolute; top: 0; height: 100%; border-radius: 2px; min-width: 2px; }
-    .sector-bar-fill.up { background: var(--up); opacity: 0.7; left: 50%; }
-    .sector-bar-fill.down { background: var(--down); opacity: 0.7; right: 50%; }
-    .sector-bar-center { position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: var(--rule-strong); }
-    .sector-pct { font-family: var(--font-data); font-size: 14px; font-weight: 700; width: 80px; text-align: right; flex-shrink: 0; }
-    .sector-pct.up { color: var(--up); }
-    .sector-pct.down { color: var(--down); }
-    .sector-pct.flat { color: var(--ink-muted); }
-    .sector-price { font-family: var(--font-data); font-size: 13px; color: var(--ink-muted); width: 70px; text-align: right; flex-shrink: 0; }
-    .sector-error { font-size: 12px; color: var(--ink-faint); font-style: italic; text-align: center; padding: 20px; }
-    .skel-sector { background: var(--paper-raise); border: 1px solid var(--rule); border-radius: 3px; padding: 16px 20px; height: 58px; margin-bottom: 8px; }
+
+    /* ---- Articles ---- */
+    .page-title { font-family: var(--font-display); font-size: 24px; }
+    .page-subtitle {
+      font-family: var(--font-data);
+      font-size: 13px;
+      color: var(--ink-muted);
+      margin-top: 4px;
+    }
+
+    .featured-card {
+      display: flex;
+      gap: 0;
+      background: var(--paper-raise) linear-gradient(var(--margin-red), var(--margin-red)) no-repeat 15px 0 / 1px 100%;
+      border: 1px solid var(--rule-strong);
+      border-radius: 3px;
+      box-shadow: var(--shadow-paper);
+      overflow: hidden;
+      text-decoration: none;
+      color: inherit;
+      margin-bottom: 12px;
+    }
+    .featured-card:hover { border-color: var(--brass-soft); }
+    .featured-img {
+      width: 260px;
+      flex-shrink: 0;
+      object-fit: cover;
+      background: var(--paper-sunken);
+      border-right: 1px solid var(--rule);
+      display: block;
+      filter: sepia(0.14) saturate(0.92);
+    }
+    .featured-body { padding: 18px 20px 18px 24px; min-width: 0; display: flex; flex-direction: column; }
+    .featured-headline {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 400;
+      line-height: 1.3;
+      margin-bottom: 8px;
+    }
+    .featured-summary {
+      font-size: 13px;
+      color: var(--ink-muted);
+      line-height: 1.55;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .news-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .news-card {
+      display: flex;
+      gap: 14px;
+      background: var(--paper-raise) linear-gradient(var(--margin-red), var(--margin-red)) no-repeat 15px 0 / 1px 100%;
+      border: 1px solid var(--rule-strong);
+      border-radius: 3px;
+      box-shadow: var(--shadow-paper);
+      padding: 14px 14px 14px 24px;
+      text-decoration: none;
+      color: inherit;
+      min-width: 0;
+    }
+    .news-card:hover { border-color: var(--brass-soft); }
+    .news-thumb {
+      width: 74px;
+      height: 74px;
+      border-radius: 2px;
+      border: 1px solid var(--rule);
+      object-fit: cover;
+      flex-shrink: 0;
+      background: var(--paper-sunken);
+      display: block;
+      filter: sepia(0.14) saturate(0.92);
+    }
+    .news-card-body { min-width: 0; }
+    .news-headline {
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.45;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .news-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      color: var(--ink-faint);
+      margin-bottom: 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .news-meta .src {
+      color: var(--brass);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .news-meta .dot { flex-shrink: 0; }
+    .news-meta .when { flex-shrink: 0; font-family: var(--font-data); font-size: 11px; }
+
+    .ticker-group {
+      background: var(--paper-raise) linear-gradient(var(--margin-red), var(--margin-red)) no-repeat 15px 0 / 1px 100%;
+      border: 1px solid var(--rule-strong);
+      border-radius: 3px;
+      box-shadow: var(--shadow-paper);
+      padding: 16px 18px 16px 26px;
+      margin-bottom: 12px;
+    }
+    .ticker-group-head {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    .ticker-group-symbol {
+      font-family: var(--font-data);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .ticker-group-name {
+      font-size: 12px;
+      color: var(--ink-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .ticker-article {
+      display: block;
+      padding: 10px 0;
+      border-top: 1px solid var(--rule);
+      text-decoration: none;
+      color: inherit;
+    }
+    .ticker-group .ticker-article:first-of-type { border-top: none; margin-top: 6px; }
+    .ticker-article:hover .ticker-article-headline { color: var(--green-bright); }
+    .ticker-article-headline {
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.45;
+    }
+    .ticker-article .news-meta { margin-bottom: 3px; }
+    .ticker-no-news {
+      font-size: 12px;
+      color: var(--ink-faint);
+      font-style: italic;
+      padding: 8px 0 2px;
+    }
+
+    .feed-empty {
+      background: transparent;
+      border: 1px dashed var(--rule-strong);
+      border-radius: 3px;
+      padding: 24px;
+      text-align: center;
+      color: var(--ink-muted);
+      font-size: 14px;
+    }
+    .feed-empty a { color: var(--green); font-weight: 600; }
+
+    .btn-save {
+      background: none; border: none; color: var(--ink-faint);
+      cursor: pointer; padding: 4px; flex-shrink: 0; border-radius: 2px;
+    }
+    .btn-save:hover { color: var(--brass); }
+    .btn-save.saved { color: var(--brass); }
+
+    .featured-card { position: relative; }
+    .featured-card .btn-save { position: absolute; top: 10px; right: 10px; }
+    .news-card { position: relative; }
+    .news-card .btn-save { position: absolute; top: 8px; right: 8px; }
+    .ticker-article { position: relative; }
+    .ticker-article .btn-save { position: absolute; top: 10px; right: 0; }
+
+    .saved-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 0; border-bottom: 1px solid var(--rule);
+    }
+    .saved-item:last-child { border-bottom: none; }
+    .saved-item-body { flex: 1; min-width: 0; }
+    .saved-item-link { text-decoration: none; color: inherit; }
+    .saved-item-link:hover .saved-item-headline { color: var(--green-bright); }
+    .saved-item-headline { font-size: 13px; font-weight: 600; line-height: 1.4; }
+
+    .refresh-btn {
+      background: none; border: 1px solid var(--rule-strong);
+      color: var(--ink-muted); border-radius: 2px;
+      padding: 8px 14px; font-size: 12px;
+      font-family: var(--font-ui); font-weight: 600; cursor: pointer;
+    }
+    .refresh-btn:hover { border-color: var(--green); color: var(--ink); }
+
+    .skel-featured {
+      background: var(--paper-raise);
+      border: 1px solid var(--rule);
+      border-radius: 3px;
+      height: 140px;
+      margin-bottom: 12px;
+      padding: 18px 20px;
+    }
+    .skel-news-card {
+      background: var(--paper-raise);
+      border: 1px solid var(--rule);
+      border-radius: 3px;
+      padding: 14px;
+      height: 102px;
+    }
     .skel-line { height: 12px; margin-bottom: 8px; }
-    @media (max-width: 480px) { .sector-price { display: none; } .sector-pct { width: 60px; } }
+
+    @media (max-width: 640px) {
+      .news-grid { grid-template-columns: 1fr; }
+      .featured-card { flex-direction: column; }
+      .featured-img { width: 100%; height: 150px; border-right: none; border-bottom: 1px solid var(--rule); }
+    }
+
+    .sector-table {
+      background: var(--paper-raise) linear-gradient(var(--margin-red), var(--margin-red)) no-repeat 15px 0 / 1px 100%;
+      border: 1px solid var(--rule-strong); border-radius: 3px;
+      box-shadow: var(--shadow-paper); overflow: hidden;
+    }
+    .sector-table-header {
+      display: grid; grid-template-columns: 36px 1fr 90px 100px 90px;
+      padding: 10px 20px 10px 28px; gap: 12px;
+      border-bottom: 2px solid var(--rule-strong);
+      font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--ink-faint);
+    }
+    .sector-row {
+      display: grid; grid-template-columns: 36px 1fr 90px 100px 90px;
+      padding: 14px 20px 14px 28px; gap: 12px; align-items: center;
+      border-bottom: 1px solid var(--rule); text-decoration: none; color: inherit;
+    }
+    .sector-row:last-child { border-bottom: none; }
+    .sector-row:hover { background: var(--paper-bright); }
+    .sr-rank { font-family: var(--font-data); font-size: 12px; font-weight: 700; color: var(--ink-faint); text-align: center; }
+    .sr-info { min-width: 0; }
+    .sr-name { font-size: 14px; font-weight: 600; }
+    .sr-ticker { font-family: var(--font-data); font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
+    .sr-price { font-family: var(--font-data); font-size: 14px; font-weight: 700; text-align: right; }
+    .sr-bar-cell { display: flex; align-items: center; }
+    .sr-bar-track { width: 100%; height: 22px; background: var(--paper-sunken); border-radius: 2px; position: relative; overflow: hidden; }
+    .sr-bar-fill { position: absolute; top: 0; height: 100%; border-radius: 2px; min-width: 3px; }
+    .sr-bar-fill.up { background: var(--up); opacity: 0.65; left: 50%; }
+    .sr-bar-fill.down { background: var(--down); opacity: 0.65; right: 50%; }
+    .sr-bar-center { position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: var(--rule-strong); }
+    .sr-pct { font-family: var(--font-data); font-size: 14px; font-weight: 700; text-align: right; }
+    .sr-pct.up { color: var(--up); }
+    .sr-pct.down { color: var(--down); }
+    .sr-pct.flat { color: var(--ink-muted); }
+    .sector-error { font-size: 13px; color: var(--ink-faint); text-align: center; padding: 30px; }
+    @media (max-width: 640px) {
+      .sector-table-header, .sector-row { grid-template-columns: 28px 1fr 80px 70px; }
+      .sr-bar-cell { display: none; }
+    }
 
   </style>
 </head>
@@ -464,21 +700,18 @@
     </aside>
 
     <div class="main-content">
-      <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <div>
           <div class="page-title">Sectors</div>
           <div class="page-subtitle">Daily performance by sector ETF</div>
         </div>
         <button class="refresh-btn" id="refreshBtn">↻ Refresh</button>
       </div>
-
       <div class="section-label">Today's performance</div>
       <div id="sectorList">
-        <div class="skel-sector"><div class="skeleton skel-line" style="width:30%"></div><div class="skeleton skel-line" style="width:60%;height:18px"></div></div>
-        <div class="skel-sector"><div class="skeleton skel-line" style="width:30%"></div><div class="skeleton skel-line" style="width:60%;height:18px"></div></div>
-        <div class="skel-sector"><div class="skeleton skel-line" style="width:30%"></div><div class="skeleton skel-line" style="width:60%;height:18px"></div></div>
-        <div class="skel-sector"><div class="skeleton skel-line" style="width:30%"></div><div class="skeleton skel-line" style="width:60%;height:18px"></div></div>
-        <div class="skel-sector"><div class="skeleton skel-line" style="width:30%"></div><div class="skeleton skel-line" style="width:60%;height:18px"></div></div>
+        <div class="sector-table">
+          <div class="sector-table-header"><div></div><div>Sector</div><div style="text-align:right">Price</div><div>Performance</div><div style="text-align:right">Day %</div></div>
+        </div>
       </div>
     </div>
   </div>
@@ -486,67 +719,38 @@
   <script src="/auth.js"></script>
   <script>
     AuthGuard.init(function () { loadSectors(); });
-
-    function esc(s) {
-      const d = document.createElement('div');
-      d.textContent = s == null ? '' : String(s);
-      return d.innerHTML;
-    }
-
-    function fmtPct(v) {
-      const abs = Math.abs(v).toFixed(2);
-      if (v < 0) return `(${abs}%)`;
-      if (v > 0) return `+${abs}%`;
-      return `${abs}%`;
-    }
-
+    function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+    function fmtPct(v) { var abs = Math.abs(v).toFixed(2); if (v < 0) return '(' + abs + '%)'; if (v > 0) return '+' + abs + '%'; return abs + '%'; }
     document.getElementById('refreshBtn').addEventListener('click', loadSectors);
-
     async function loadSectors() {
-      const el = document.getElementById('sectorList');
+      var el = document.getElementById('sectorList');
       try {
-        const res = await AuthGuard.fetch('/api/sectors');
-        const data = await res.json();
-
-        if (!res.ok) {
-          el.innerHTML = '<div class="sector-error">' + esc(data.error || 'Could not load sectors') + '</div>';
-          return;
+        var res = await AuthGuard.fetch('/api/sectors');
+        var data = await res.json();
+        if (!res.ok) { el.innerHTML = '<div class="sector-error">' + esc(data.error) + '</div>'; return; }
+        var sectors = (data.sectors || []).filter(function(s) { return !s.error && s.changePercent != null; });
+        sectors.sort(function(a, b) { return (b.changePercent || 0) - (a.changePercent || 0); });
+        if (sectors.length === 0) { el.innerHTML = '<div class="sector-error">No sector data available</div>'; return; }
+        var maxAbs = 0.01;
+        for (var k = 0; k < sectors.length; k++) { var av = Math.abs(sectors[k].changePercent || 0); if (av > maxAbs) maxAbs = av; }
+        var html = '<div class="sector-table">';
+        html += '<div class="sector-table-header"><div></div><div>Sector</div><div style="text-align:right">Price</div><div>Performance</div><div style="text-align:right">Day %</div></div>';
+        for (var i = 0; i < sectors.length; i++) {
+          var s = sectors[i];
+          var dir = s.changePercent > 0 ? 'up' : s.changePercent < 0 ? 'down' : 'flat';
+          var barWidth = (Math.abs(s.changePercent) / maxAbs) * 50;
+          html += '<a href="/stock.html?t=' + encodeURIComponent(s.ticker) + '" class="sector-row">';
+          html += '<div class="sr-rank">' + (i + 1) + '</div>';
+          html += '<div class="sr-info"><div class="sr-name">' + esc(s.name) + '</div><div class="sr-ticker">' + esc(s.ticker) + '</div></div>';
+          html += '<div class="sr-price">$' + (s.price ? s.price.toFixed(2) : '\u2014') + '</div>';
+          html += '<div class="sr-bar-cell"><div class="sr-bar-track"><div class="sr-bar-center"></div><div class="sr-bar-fill ' + dir + '" style="width:' + barWidth + '%"></div></div></div>';
+          html += '<div class="sr-pct ' + dir + '">' + fmtPct(s.changePercent) + '</div>';
+          html += '</a>';
         }
-
-        let sectors = (data.sectors || []).filter(s => !s.error && s.changePercent != null);
-        sectors.sort((a, b) => (b.changePercent || 0) - (a.changePercent || 0));
-
-        if (sectors.length === 0) {
-          el.innerHTML = '<div class="sector-error">No sector data available</div>';
-          return;
-        }
-
-        const maxAbs = Math.max(...sectors.map(s => Math.abs(s.changePercent || 0)), 0.01);
-
-        el.innerHTML = '<div class="sector-list">' + sectors.map((s, i) => {
-          const dir = s.changePercent > 0 ? 'up' : s.changePercent < 0 ? 'down' : 'flat';
-          const barWidth = (Math.abs(s.changePercent) / maxAbs) * 50;
-
-          return `
-            <a href="/stock.html?t=${encodeURIComponent(s.ticker)}" class="sector-card">
-              <div class="sector-rank">${i + 1}</div>
-              <div class="sector-bar-wrap">
-                <div class="sector-name">${esc(s.name)}<span class="sector-ticker">${esc(s.ticker)}</span></div>
-                <div class="sector-bar-track">
-                  <div class="sector-bar-center"></div>
-                  <div class="sector-bar-fill ${dir}" style="width:${barWidth}%"></div>
-                </div>
-              </div>
-              <div class="sector-price">$${s.price ? s.price.toFixed(2) : '—'}</div>
-              <div class="sector-pct ${dir}">${fmtPct(s.changePercent)}</div>
-            </a>
-          `;
-        }).join('') + '</div>';
-      } catch (err) {
-        el.innerHTML = '<div class="sector-error">Could not reach the server</div>';
-      }
+        html += '</div>';
+        el.innerHTML = html;
+      } catch (err) { el.innerHTML = '<div class="sector-error">Could not reach the server</div>'; }
     }
-
     setInterval(loadSectors, 30000);
   </script>
 </body>
