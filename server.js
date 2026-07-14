@@ -173,6 +173,20 @@ async function initDb(retries = 10, delayMs = 3000) {
       // exist — ordering matters for ALTER TABLE ... REFERENCES.
       await pool.query(`ALTER TABLE alerts ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)`);
 
+      // Saved articles — bookmarked news items, per user.
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS saved_articles (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id),
+          url TEXT NOT NULL,
+          headline TEXT NOT NULL,
+          source TEXT,
+          datetime BIGINT,
+          saved_at TIMESTAMP DEFAULT NOW(),
+          UNIQUE(user_id, url)
+        )
+      `);
+
       console.log('Database connected and ready.');
       dbReady = true;
       return;
@@ -1102,6 +1116,102 @@ app.get('/api/news/watchlist', requireAuth, async (req, res) => {
     res.json({ news });
   } catch (err) {
     res.status(500).json({ error: 'Failed to load watchlist news' });
+  }
+});
+
+// ------------------------------------------------------------
+// SECTORS — fetch quotes for a fixed set of sector ETFs and
+// return them sorted by daily performance. The free tier can
+// quote ETFs just like regular stocks.
+// ------------------------------------------------------------
+const SECTOR_ETFS = [
+  { ticker: 'XLK', name: 'Technology' },
+  { ticker: 'XLF', name: 'Financials' },
+  { ticker: 'XLE', name: 'Energy' },
+  { ticker: 'XLV', name: 'Healthcare' },
+  { ticker: 'XLY', name: 'Consumer Discretionary' },
+  { ticker: 'XLP', name: 'Consumer Staples' },
+  { ticker: 'XLI', name: 'Industrials' },
+  { ticker: 'XLB', name: 'Materials' },
+  { ticker: 'XLRE', name: 'Real Estate' },
+  { ticker: 'XLU', name: 'Utilities' },
+  { ticker: 'XLC', name: 'Communication' },
+];
+
+app.get('/api/sectors', requireAuth, async (req, res) => {
+  if (!process.env.FINNHUB_API_KEY) {
+    return res.status(500).json({ error: 'Server is missing FINNHUB_API_KEY' });
+  }
+
+  const cached = newsCacheGet('sectors');
+  if (cached) return res.json({ sectors: cached });
+
+  try {
+    const results = [];
+    for (const etf of SECTOR_ETFS) {
+      const quote = await fetchQuote(etf.ticker);
+      results.push({
+        ticker: etf.ticker,
+        name: etf.name,
+        price: quote.price,
+        changePercent: quote.changePercent,
+        dayHigh: quote.dayHigh,
+        dayLow: quote.dayLow,
+        error: quote.error || null,
+      });
+    }
+    newsCacheSet('sectors', results);
+    res.json({ sectors: results });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load sector data' });
+  }
+});
+
+// ------------------------------------------------------------
+// SAVED ARTICLES — bookmark/unbookmark news articles.
+// ------------------------------------------------------------
+app.get('/api/saved-articles', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  try {
+    const { rows } = await pool.query(
+      'SELECT url, headline, source, datetime, saved_at FROM saved_articles WHERE user_id = $1 ORDER BY saved_at DESC',
+      [req.session.userId]
+    );
+    res.json({ articles: rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+app.post('/api/saved-articles', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  const { url, headline, source, datetime } = req.body;
+  if (!url || !headline) {
+    return res.status(400).json({ error: 'URL and headline are required' });
+  }
+  try {
+    await pool.query(
+      'INSERT INTO saved_articles (user_id, url, headline, source, datetime) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (user_id, url) DO NOTHING',
+      [req.session.userId, url, headline, source || null, datetime || null]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+app.delete('/api/saved-articles', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: 'URL is required' });
+  try {
+    await pool.query(
+      'DELETE FROM saved_articles WHERE user_id = $1 AND url = $2',
+      [req.session.userId, url]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
   }
 });
 
