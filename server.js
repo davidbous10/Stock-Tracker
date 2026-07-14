@@ -1216,12 +1216,95 @@ app.delete('/api/saved-articles', requireAuth, async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// AI CHAT — the Trade Track assistant. Gathers the user's live
-// watchlist, prices, and alerts, packages them as context, and
-// sends the conversation to the Anthropic API. The assistant
-// knows about this user's actual portfolio, not just generic
-// market knowledge.
+// AI CHAT — the Trade Track assistant with TOOL USE.
+// The AI can add/remove stocks from the watchlist, look up
+// live quotes for any ticker, and answer questions with the
+// user's real portfolio context.
 // ------------------------------------------------------------
+const CHAT_TOOLS = [
+  {
+    name: 'add_to_watchlist',
+    description: 'Add a stock ticker to the user\'s watchlist. Use this when the user asks to add, track, or watch a stock. Always confirm what you added.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        ticker: { type: 'string', description: 'Stock ticker symbol, e.g. TSLA, AAPL' },
+      },
+      required: ['ticker'],
+    },
+  },
+  {
+    name: 'remove_from_watchlist',
+    description: 'Remove a stock ticker from the user\'s watchlist. Use this when the user asks to remove, untrack, or stop watching a stock.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        ticker: { type: 'string', description: 'Stock ticker symbol to remove' },
+      },
+      required: ['ticker'],
+    },
+  },
+  {
+    name: 'get_stock_quote',
+    description: 'Get a live price quote for any stock ticker — including ones NOT on the user\'s watchlist. Use this when the user asks about a stock\'s current price that isn\'t in the watchlist context, or when you need fresh data.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        ticker: { type: 'string', description: 'Stock ticker symbol' },
+      },
+      required: ['ticker'],
+    },
+  },
+];
+
+async function executeChatTool(toolName, input, userId) {
+  const ticker = (input.ticker || '').toUpperCase().trim();
+  if (!ticker) return { error: 'No ticker provided' };
+
+  switch (toolName) {
+    case 'add_to_watchlist': {
+      try {
+        const existing = await getAllWatchlistItems(userId);
+        if (existing.some(i => i.ticker === ticker)) {
+          return { result: `${ticker} is already on the watchlist.` };
+        }
+        const { rows: maxRows } = await pool.query(
+          'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM watchlist WHERE user_id = $1',
+          [userId]
+        );
+        await pool.query(
+          'INSERT INTO watchlist (ticker, sort_order, user_id) VALUES ($1, $2, $3)',
+          [ticker, maxRows[0].next, userId]
+        );
+        return { result: `${ticker} has been added to the watchlist.` };
+      } catch (err) {
+        return { error: `Could not add ${ticker}: ${err.message}` };
+      }
+    }
+    case 'remove_from_watchlist': {
+      try {
+        const { rowCount } = await pool.query(
+          'DELETE FROM watchlist WHERE ticker = $1 AND user_id = $2',
+          [ticker, userId]
+        );
+        if (rowCount === 0) return { result: `${ticker} wasn't on the watchlist.` };
+        return { result: `${ticker} has been removed from the watchlist.` };
+      } catch (err) {
+        return { error: `Could not remove ${ticker}: ${err.message}` };
+      }
+    }
+    case 'get_stock_quote': {
+      const quote = await fetchQuote(ticker);
+      if (quote.error) return { error: `Could not get quote for ${ticker}` };
+      return {
+        result: `${ticker}: $${quote.price.toFixed(2)}, ${quote.changePercent > 0 ? '+' : ''}${quote.changePercent.toFixed(2)}% today, range $${quote.dayLow.toFixed(2)}-$${quote.dayHigh.toFixed(2)}, open $${quote.dayOpen.toFixed(2)}`
+      };
+    }
+    default:
+      return { error: 'Unknown tool' };
+  }
+}
+
 app.post('/api/chat', requireAuth, async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) {
     return res.status(500).json({ error: 'AI assistant is not configured — add ANTHROPIC_API_KEY in Railway' });
@@ -1233,11 +1316,10 @@ app.post('/api/chat', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'No messages provided' });
   }
 
-  // Limit conversation length to avoid token blowup
   const trimmed = messages.slice(-20);
 
   try {
-    // Gather this user's live context
+    // Gather user context
     const items = await getAllWatchlistItems(req.session.userId);
     const tickers = items.map(i => i.ticker);
 
@@ -1252,7 +1334,6 @@ app.post('/api/chat', requireAuth, async (req, res) => {
         }).join('\n');
     }
 
-    // Alerts
     let alertsContext = '';
     try {
       const { rows: alerts } = await pool.query(
@@ -1267,49 +1348,105 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 
     const userName = req.session.userName || req.session.userEmail;
 
-    const systemPrompt = `You are the Trade Track AI assistant — a knowledgeable, concise stock market companion built into a personal stock tracking app.
+    const systemPrompt = `You are the Trade Track AI assistant — a knowledgeable, concise stock market companion built into a personal stock tracking app called Trade Track.
 
 The user's name is ${userName}.
 
 ${watchlistContext}${alertsContext}
 
+You have tools to take actions:
+- add_to_watchlist: Add a stock to the user's watchlist. Use it when they say things like "add Tesla" or "track GOOGL" or "watch Microsoft".
+- remove_from_watchlist: Remove a stock. Use when they say "remove TSLA" or "stop tracking Amazon".
+- get_stock_quote: Look up the live price of ANY stock, even ones not on the watchlist. Use when they ask about a stock's price that isn't in the watchlist data above.
+
 Guidelines:
 - Be concise and direct. Short paragraphs, not walls of text.
-- Reference the user's actual watchlist data when relevant — you have their live prices above.
-- For questions about specific stocks, use the price data you have. If they ask about a stock NOT on their watchlist, say what you know but note you don't have live data for it.
-- You can suggest stocks to look into, explain market concepts, analyze trends from the data shown, and give general market perspective.
-- Always include a brief disclaimer when giving anything that could be read as investment advice — you're an AI assistant, not a financial advisor.
+- When using tools, always confirm the result to the user naturally.
+- If the user asks to add/remove a stock, use the tool — don't just tell them to do it manually.
+- For questions about specific stocks, check if you have the data in the watchlist above. If not, use get_stock_quote to look it up before answering.
+- Always include a brief disclaimer when giving anything that could be read as investment advice.
 - Keep responses under 200 words unless the question clearly needs more depth.
 - Use plain language. No jargon without explanation.`;
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    };
+
+    // First API call — may return text or tool_use
+    let apiMessages = [...trimmed];
+    let response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
+      headers,
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 1024,
         system: systemPrompt,
-        messages: trimmed,
+        messages: apiMessages,
+        tools: CHAT_TOOLS,
       }),
     });
-
-    const data = await response.json();
+    let data = await response.json();
 
     if (!response.ok) {
       console.error('Anthropic API error:', data);
       return res.status(502).json({ error: 'AI service error — try again in a moment' });
     }
 
+    // Handle tool use loop (up to 3 rounds to prevent runaway)
+    let rounds = 0;
+    while (data.stop_reason === 'tool_use' && rounds < 3) {
+      rounds++;
+      const toolBlocks = data.content.filter(b => b.type === 'tool_use');
+      const toolResults = [];
+
+      for (const block of toolBlocks) {
+        const result = await executeChatTool(block.name, block.input, req.session.userId);
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: block.id,
+          content: JSON.stringify(result),
+        });
+      }
+
+      // Send tool results back to get the final text response
+      apiMessages = [
+        ...apiMessages,
+        { role: 'assistant', content: data.content },
+        { role: 'user', content: toolResults },
+      ];
+
+      response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1024,
+          system: systemPrompt,
+          messages: apiMessages,
+          tools: CHAT_TOOLS,
+        }),
+      });
+      data = await response.json();
+
+      if (!response.ok) {
+        console.error('Anthropic API error (tool round):', data);
+        return res.status(502).json({ error: 'AI service error — try again in a moment' });
+      }
+    }
+
+    // Extract final text
     const reply = data.content
       .filter(b => b.type === 'text')
       .map(b => b.text)
       .join('\n');
 
-    res.json({ reply });
+    // Tell the frontend if the watchlist was modified so it can refresh
+    const watchlistChanged = data.content.some(b => b.type === 'tool_use') ||
+      (rounds > 0);
+
+    res.json({ reply, watchlistChanged });
   } catch (err) {
     console.error('Chat error:', err.message);
     res.status(500).json({ error: 'Something went wrong — try again' });
