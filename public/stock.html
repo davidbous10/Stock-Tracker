@@ -194,6 +194,64 @@
     .news-meta .when { flex-shrink: 0; font-family: var(--font-data); font-size: 11px; }
 
     .empty-section { font-size: 12px; color: var(--ink-faint); font-style: italic; padding: 8px 0; }
+
+    /* ---- Analysis section ---- */
+    .analysis-card {
+      background: var(--paper-raise) linear-gradient(var(--margin-red), var(--margin-red)) no-repeat 15px 0 / 1px 100%;
+      border: 1px solid var(--rule-strong); border-radius: 3px;
+      box-shadow: var(--shadow-paper);
+      padding: 20px 22px 20px 30px;
+      margin-bottom: 12px;
+    }
+    .analysis-heading {
+      font-family: var(--font-display); font-size: 16px; margin-bottom: 14px;
+    }
+
+    .consensus-bar-wrap { margin-bottom: 16px; }
+    .consensus-labels {
+      display: flex; justify-content: space-between;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--ink-faint); margin-bottom: 6px;
+    }
+    .consensus-bar {
+      display: flex; height: 28px; border-radius: 2px; overflow: hidden;
+      border: 1px solid var(--rule);
+    }
+    .cb-seg {
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-data); font-size: 11px; font-weight: 700;
+      color: #F3EEDF; min-width: 0;
+    }
+    .cb-seg.strong-buy { background: #145A35; }
+    .cb-seg.buy { background: var(--up); }
+    .cb-seg.hold { background: var(--brass); }
+    .cb-seg.sell { background: #A0453E; }
+    .cb-seg.strong-sell { background: var(--down); }
+    .consensus-legend {
+      display: flex; flex-wrap: wrap; gap: 12px;
+      margin-top: 8px; font-size: 11px; color: var(--ink-muted);
+    }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .legend-dot { width: 8px; height: 8px; border-radius: 1px; flex-shrink: 0; }
+
+    .signal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .signal-card {
+      background: var(--paper-bright); border: 1px solid var(--rule);
+      border-radius: 2px; padding: 12px 14px;
+    }
+    .signal-label { font-size: 10px; font-weight: 700; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+    .signal-value { font-family: var(--font-data); font-size: 14px; font-weight: 700; }
+    .signal-value.bullish { color: var(--up); }
+    .signal-value.bearish { color: var(--down); }
+    .signal-value.neutral { color: var(--brass); }
+
+    .analysis-summary {
+      font-size: 13px; line-height: 1.6; color: var(--ink-muted);
+      border-top: 1px dashed var(--rule); padding-top: 14px;
+    }
+    .analysis-disclaimer {
+      font-size: 10px; color: var(--ink-faint); margin-top: 10px; font-style: italic;
+    }
     .stock-link { color: var(--green); font-weight: 600; text-decoration: none; font-size: 12px; }
     .stock-link:hover { text-decoration: underline; }
 
@@ -336,6 +394,13 @@
         <div class="skeleton skel-line" style="width:90%;height:14px"></div>
         <div class="skeleton skel-line" style="width:75%;height:14px"></div>
       </div>
+
+      <div class="section-label">Analysis</div>
+      <div id="analysisArea">
+        <div class="skeleton skel-line" style="width:45%;margin-bottom:10px"></div>
+        <div class="skeleton" style="width:100%;height:28px;margin-bottom:10px"></div>
+        <div class="skeleton skel-line" style="width:80%"></div>
+      </div>
     </div>
   </div>
 
@@ -401,7 +466,11 @@
       loadQuote();
       loadChart();
       loadNews();
+      loadAnalysis();
       checkWatchlist();
+
+      // Auto-refresh price every 30 seconds (same as watchlist)
+      setInterval(loadQuote, 30000);
     }
 
     // Is this ticker on the user's watchlist? Drives the add/remove button.
@@ -590,6 +659,7 @@
         const res = await AuthGuard.fetch(`/api/stock/${encodeURIComponent(SYMBOL)}/history`);
         const data = await res.json();
         const points = data.points || [];
+        window._chartPoints = points;
 
         if (points.length < 2) {
           el.innerHTML = `<div class="chart-card"><div class="chart-label">Price history</div><div class="chart-empty">Collecting data — the chart will appear once there are enough snapshots</div></div>`;
@@ -669,6 +739,141 @@
       } catch (err) {
         el.innerHTML = '<div class="empty-section">Could not load news</div>';
       }
+    }
+
+    async function loadAnalysis() {
+      const el = document.getElementById('analysisArea');
+
+      // Wait for quote and profile to load (they run in parallel),
+      // then also fetch analyst recommendations.
+      const recPromise = AuthGuard.fetch(`/api/stock/${encodeURIComponent(SYMBOL)}/recommendation`)
+        .then(r => r.json()).catch(() => ({ available: false }));
+
+      // Give quote and profile a moment to land
+      await new Promise(r => setTimeout(r, 1200));
+
+      const rec = await recPromise;
+      const q = window._quote || {};
+      const p = window._profile || {};
+
+      const signals = [];
+      let html = '<div class="analysis-card">';
+      html += '<div class="analysis-heading">Should you buy ' + esc(SYMBOL) + '?</div>';
+
+      // ---- Analyst consensus bar ----
+      if (rec.available) {
+        const total = rec.strongBuy + rec.buy + rec.hold + rec.sell + rec.strongSell;
+        if (total > 0) {
+          const pct = (n) => ((n / total) * 100).toFixed(1);
+          const seg = (cls, n) => n > 0 ? `<div class="cb-seg ${cls}" style="width:${pct(n)}%">${n}</div>` : '';
+
+          html += `
+            <div class="consensus-bar-wrap">
+              <div class="consensus-labels">
+                <span>Strong buy</span>
+                <span>Strong sell</span>
+              </div>
+              <div class="consensus-bar">
+                ${seg('strong-buy', rec.strongBuy)}
+                ${seg('buy', rec.buy)}
+                ${seg('hold', rec.hold)}
+                ${seg('sell', rec.sell)}
+                ${seg('strong-sell', rec.strongSell)}
+              </div>
+              <div class="consensus-legend">
+                <div class="legend-item"><div class="legend-dot" style="background:#145A35"></div> Strong buy (${rec.strongBuy})</div>
+                <div class="legend-item"><div class="legend-dot" style="background:var(--up)"></div> Buy (${rec.buy})</div>
+                <div class="legend-item"><div class="legend-dot" style="background:var(--brass)"></div> Hold (${rec.hold})</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#A0453E"></div> Sell (${rec.sell})</div>
+                <div class="legend-item"><div class="legend-dot" style="background:var(--down)"></div> Strong sell (${rec.strongSell})</div>
+              </div>
+            </div>`;
+
+          const bullish = rec.strongBuy + rec.buy;
+          const bearish = rec.sell + rec.strongSell;
+          if (bullish > bearish) signals.push({ label: 'Analyst consensus', value: 'Bullish', cls: 'bullish' });
+          else if (bearish > bullish) signals.push({ label: 'Analyst consensus', value: 'Bearish', cls: 'bearish' });
+          else signals.push({ label: 'Analyst consensus', value: 'Mixed', cls: 'neutral' });
+        }
+      }
+
+      // ---- 52-week range position ----
+      if (p.weekHigh52 && p.weekLow52 && q.price) {
+        const high = parseFloat(p.weekHigh52);
+        const low = parseFloat(p.weekLow52);
+        const range = high - low;
+        if (range > 0) {
+          const position = ((q.price - low) / range) * 100;
+          let rangeSignal, rangeCls;
+          if (position < 25) { rangeSignal = 'Near 52w low'; rangeCls = 'bearish'; }
+          else if (position < 45) { rangeSignal = 'Lower half'; rangeCls = 'neutral'; }
+          else if (position < 55) { rangeSignal = 'Mid range'; rangeCls = 'neutral'; }
+          else if (position < 75) { rangeSignal = 'Upper half'; rangeCls = 'bullish'; }
+          else { rangeSignal = 'Near 52w high'; rangeCls = 'bullish'; }
+          signals.push({ label: '52-week position', value: rangeSignal + ' (' + position.toFixed(0) + '%)', cls: rangeCls });
+        }
+      }
+
+      // ---- Price trend from history ----
+      if (window._chartPoints && window._chartPoints.length >= 4) {
+        const pts = window._chartPoints;
+        const recent = pts.slice(-Math.ceil(pts.length / 3));
+        const older = pts.slice(0, Math.ceil(pts.length / 3));
+        const avgRecent = recent.reduce((s, p) => s + p.price, 0) / recent.length;
+        const avgOlder = older.reduce((s, p) => s + p.price, 0) / older.length;
+        const trendPct = ((avgRecent - avgOlder) / avgOlder) * 100;
+
+        let trendLabel, trendCls;
+        if (trendPct > 3) { trendLabel = 'Uptrend'; trendCls = 'bullish'; }
+        else if (trendPct < -3) { trendLabel = 'Downtrend'; trendCls = 'bearish'; }
+        else { trendLabel = 'Sideways'; trendCls = 'neutral'; }
+        signals.push({ label: 'Price trend', value: trendLabel + ' (' + (trendPct > 0 ? '+' : '') + trendPct.toFixed(1) + '%)', cls: trendCls });
+      }
+
+      // ---- Day momentum ----
+      if (q.changePercent != null) {
+        let dayLabel, dayCls;
+        if (q.changePercent > 2) { dayLabel = 'Strong up day'; dayCls = 'bullish'; }
+        else if (q.changePercent > 0.5) { dayLabel = 'Up day'; dayCls = 'bullish'; }
+        else if (q.changePercent < -2) { dayLabel = 'Strong down day'; dayCls = 'bearish'; }
+        else if (q.changePercent < -0.5) { dayLabel = 'Down day'; dayCls = 'bearish'; }
+        else { dayLabel = 'Flat day'; dayCls = 'neutral'; }
+        signals.push({ label: "Today's move", value: dayLabel + ' (' + fmtPct(q.changePercent) + ')', cls: dayCls });
+      }
+
+      // ---- Signal grid ----
+      if (signals.length > 0) {
+        html += '<div class="signal-grid">';
+        html += signals.map(s => `
+          <div class="signal-card">
+            <div class="signal-label">${esc(s.label)}</div>
+            <div class="signal-value ${s.cls}">${esc(s.value)}</div>
+          </div>
+        `).join('');
+        html += '</div>';
+      }
+
+      // ---- Overall summary ----
+      const bullishCount = signals.filter(s => s.cls === 'bullish').length;
+      const bearishCount = signals.filter(s => s.cls === 'bearish').length;
+      const neutralCount = signals.filter(s => s.cls === 'neutral').length;
+
+      let overall = '';
+      if (signals.length === 0) {
+        overall = 'Not enough data to generate a signal for ' + SYMBOL + ' yet. Check back once price history has accumulated.';
+      } else if (bullishCount > bearishCount && bullishCount > neutralCount) {
+        overall = SYMBOL + ' is showing mostly bullish signals — analysts lean positive, and the price action supports it. That said, no single set of indicators tells the whole story.';
+      } else if (bearishCount > bullishCount && bearishCount > neutralCount) {
+        overall = SYMBOL + ' is showing mostly bearish signals right now. The data suggests caution, though conditions can shift quickly.';
+      } else {
+        overall = SYMBOL + ' is showing mixed signals — some indicators lean positive, others lean negative. It may be worth waiting for a clearer trend before making a move.';
+      }
+
+      html += `<div class="analysis-summary">${esc(overall)}</div>`;
+      html += '<div class="analysis-disclaimer">This is not financial advice. These signals are based on publicly available data and simple trend analysis. Always do your own research.</div>';
+      html += '</div>';
+
+      el.innerHTML = html;
     }
   </script>
 </body>
