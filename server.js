@@ -76,6 +76,16 @@ function requireAuth(req, res, next) {
   next();
 }
 
+// Lightweight activity logger. Fire-and-forget (doesn't block the
+// response). Logs are capped by a cleanup job so they don't grow
+// forever.
+function logActivity(userId, action, detail) {
+  if (!dbReady || !pool) return;
+  pool.query(
+    'INSERT INTO activity_log (user_id, action, detail) VALUES ($1, $2, $3)',
+    [userId, action, detail || null]
+  ).catch(() => {});
+}
 // ------------------------------------------------------------
 // initDb() — schema setup and migrations, same retry pattern as
 // before. New this phase: a "users" table, a user_id column on
@@ -187,6 +197,25 @@ async function initDb(retries = 10, delayMs = 3000) {
         )
       `);
 
+      // Activity log for admin analytics
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS activity_log (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER,
+          action TEXT NOT NULL,
+          detail TEXT,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_activity_log_time
+        ON activity_log (created_at DESC)
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_activity_log_user
+        ON activity_log (user_id, created_at DESC)
+      `);
+
       console.log('Database connected and ready.');
       dbReady = true;
       return;
@@ -267,6 +296,7 @@ app.post('/api/auth/signup', async (req, res) => {
     req.session.userId = userId;
     req.session.userEmail = email;
     req.session.userName = name;
+    logActivity(userId, 'signup');
     res.json({ email, name });
   } catch (err) {
     if (err.code === '23505') {
@@ -297,6 +327,7 @@ app.post('/api/auth/login', async (req, res) => {
     req.session.userId = rows[0].id;
     req.session.userEmail = email;
     req.session.userName = rows[0].name || null;
+    logActivity(rows[0].id, 'login');
     res.json({ email, name: rows[0].name || null });
   } catch (err) {
     res.status(500).json({ error: 'Database error' });
@@ -390,39 +421,158 @@ app.post('/api/auth/change-name', requireAuth, async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// ROUTE: GET /api/admin/stats
-// Only accessible to user_id = 1 (the creator / first account).
-// Returns signup count and recent signups so you can see how
-// many people are using the app.
+// ADMIN API — only accessible to user_id = 1. Powers the admin
+// dashboard with user stats, usage metrics, and activity logs.
 // ------------------------------------------------------------
-app.get('/api/admin/stats', requireAuth, async (req, res) => {
-  if (!requireDb(res)) return;
-
-  if (req.session.userId !== 1) {
+function requireAdmin(req, res, next) {
+  if (!req.session || req.session.userId !== 1) {
     return res.status(403).json({ error: 'Admin only' });
   }
+  next();
+}
 
+// Overview stats
+app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res) => {
+  if (!requireDb(res)) return;
   try {
-    const { rows: countRows } = await pool.query('SELECT COUNT(*) FROM users');
-    const total = parseInt(countRows[0].count, 10);
+    const { rows: userCount } = await pool.query('SELECT COUNT(*) FROM users');
+    const { rows: tickerCount } = await pool.query('SELECT COUNT(DISTINCT ticker) FROM watchlist');
+    const { rows: alertCount } = await pool.query('SELECT COUNT(*) FROM alerts');
+    const { rows: savedCount } = await pool.query('SELECT COUNT(*) FROM saved_articles');
 
-    const { rows: recent } = await pool.query(
-      'SELECT id, email, name, created_at FROM users ORDER BY created_at DESC LIMIT 20'
+    // Signups per day (last 30 days)
+    const { rows: signupTrend } = await pool.query(`
+      SELECT DATE(created_at) AS day, COUNT(*) AS count
+      FROM users
+      WHERE created_at > NOW() - INTERVAL '30 days'
+      GROUP BY DATE(created_at)
+      ORDER BY day
+    `);
+
+    // Users list
+    const { rows: users } = await pool.query(
+      'SELECT id, email, name, created_at FROM users ORDER BY created_at DESC LIMIT 50'
     );
 
-    const { rows: tickerCount } = await pool.query(
-      'SELECT COUNT(DISTINCT ticker) FROM watchlist'
+    // Per-user watchlist counts
+    const { rows: userWatchlists } = await pool.query(`
+      SELECT u.id, u.email, u.name, COUNT(w.id) AS stock_count
+      FROM users u LEFT JOIN watchlist w ON u.id = w.user_id
+      GROUP BY u.id, u.email, u.name
+      ORDER BY stock_count DESC
+    `);
+
+    res.json({
+      totalUsers: parseInt(userCount[0].count, 10),
+      totalTickers: parseInt(tickerCount[0].count, 10),
+      totalAlerts: parseInt(alertCount[0].count, 10),
+      totalSavedArticles: parseInt(savedCount[0].count, 10),
+      signupTrend: signupTrend.map(r => ({ day: r.day, count: parseInt(r.count, 10) })),
+      users: users.map(u => ({ id: u.id, email: u.email, name: u.name, joinedAt: u.created_at })),
+      userWatchlists: userWatchlists.map(u => ({
+        id: u.id, email: u.email, name: u.name,
+        stockCount: parseInt(u.stock_count, 10),
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Usage metrics
+app.get('/api/admin/usage', requireAuth, requireAdmin, async (req, res) => {
+  if (!requireDb(res)) return;
+  try {
+    // Action counts (last 7 days)
+    const { rows: actionCounts } = await pool.query(`
+      SELECT action, COUNT(*) AS count
+      FROM activity_log
+      WHERE created_at > NOW() - INTERVAL '7 days'
+      GROUP BY action
+      ORDER BY count DESC
+    `);
+
+    // Daily active users (last 14 days)
+    const { rows: dailyActive } = await pool.query(`
+      SELECT DATE(created_at) AS day, COUNT(DISTINCT user_id) AS users
+      FROM activity_log
+      WHERE created_at > NOW() - INTERVAL '14 days'
+      GROUP BY DATE(created_at)
+      ORDER BY day
+    `);
+
+    // Most tracked stocks across all users
+    const { rows: popularStocks } = await pool.query(`
+      SELECT ticker, COUNT(DISTINCT user_id) AS user_count
+      FROM watchlist
+      GROUP BY ticker
+      ORDER BY user_count DESC
+      LIMIT 20
+    `);
+
+    // Chat usage (last 7 days)
+    const { rows: chatUsage } = await pool.query(`
+      SELECT DATE(created_at) AS day, COUNT(*) AS messages
+      FROM activity_log
+      WHERE action = 'chat' AND created_at > NOW() - INTERVAL '7 days'
+      GROUP BY DATE(created_at)
+      ORDER BY day
+    `);
+
+    res.json({
+      actionCounts: actionCounts.map(r => ({ action: r.action, count: parseInt(r.count, 10) })),
+      dailyActive: dailyActive.map(r => ({ day: r.day, users: parseInt(r.users, 10) })),
+      popularStocks: popularStocks.map(r => ({ ticker: r.ticker, userCount: parseInt(r.user_count, 10) })),
+      chatUsage: chatUsage.map(r => ({ day: r.day, messages: parseInt(r.messages, 10) })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Activity log (paginated)
+app.get('/api/admin/logs', requireAuth, requireAdmin, async (req, res) => {
+  if (!requireDb(res)) return;
+  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  const offset = parseInt(req.query.offset) || 0;
+  const userFilter = req.query.user_id ? parseInt(req.query.user_id) : null;
+  const actionFilter = req.query.action || null;
+
+  try {
+    let where = 'WHERE 1=1';
+    const params = [];
+    if (userFilter) { params.push(userFilter); where += ` AND user_id = $${params.length}`; }
+    if (actionFilter) { params.push(actionFilter); where += ` AND action = $${params.length}`; }
+
+    params.push(limit);
+    params.push(offset);
+
+    const { rows } = await pool.query(`
+      SELECT al.id, al.user_id, u.email, al.action, al.detail, al.created_at
+      FROM activity_log al
+      LEFT JOIN users u ON al.user_id = u.id
+      ${where}
+      ORDER BY al.created_at DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}
+    `, params);
+
+    const { rows: total } = await pool.query(
+      `SELECT COUNT(*) FROM activity_log ${where}`,
+      params.slice(0, -2)
     );
 
     res.json({
-      totalUsers: total,
-      totalDistinctTickers: parseInt(tickerCount[0].count, 10),
-      recentSignups: recent.map(u => ({
-        id: u.id,
-        email: u.email,
-        name: u.name || null,
-        joinedAt: u.created_at,
+      logs: rows.map(r => ({
+        id: r.id,
+        userId: r.user_id,
+        email: r.email,
+        action: r.action,
+        detail: r.detail,
+        time: r.created_at,
       })),
+      total: parseInt(total[0].count, 10),
+      limit,
+      offset,
     });
   } catch (err) {
     res.status(500).json({ error: 'Database error' });
@@ -485,6 +635,7 @@ app.post('/api/watchlist', requireAuth, async (req, res) => {
     }
   } catch (err) {} // non-critical, the background job will catch it
 
+  logActivity(userId, 'add_stock', raw);
   const items = await getAllWatchlistItems(userId);
   res.json({ items });
 });
@@ -1206,6 +1357,7 @@ app.post('/api/saved-articles', requireAuth, async (req, res) => {
       'INSERT INTO saved_articles (user_id, url, headline, source, datetime) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (user_id, url) DO NOTHING',
       [req.session.userId, url, headline, source || null, datetime || null]
     );
+    logActivity(req.session.userId, 'save_article', url);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Database error' });
@@ -1463,6 +1615,7 @@ Guidelines:
     const watchlistChanged = data.content.some(b => b.type === 'tool_use') ||
       (rounds > 0);
 
+    logActivity(req.session.userId, 'chat', trimmed[trimmed.length - 1].content.slice(0, 100));
     res.json({ reply, watchlistChanged });
   } catch (err) {
     console.error('Chat error:', err.message);
