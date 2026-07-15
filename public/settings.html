@@ -580,6 +580,13 @@
         </div>
       </div>
 
+      <div class="settings-section">
+        <h2>Notifications</h2>
+        <div class="section-desc">Get browser push notifications when your price alerts fire, even when you're not on Trade Track.</div>
+        <div id="pushStatus" style="margin-bottom:10px;font-size:13px;color:var(--ink-muted)">Checking...</div>
+        <button class="btn-settings-submit" id="pushToggle" style="display:none" onclick="togglePush()">Enable notifications</button>
+      </div>
+
       <div class="settings-section" id="adminSection" style="display:none">
         <h2>Admin</h2>
         <div class="section-desc">Only visible to you as the app creator</div>
@@ -744,6 +751,117 @@
         submitBtn.disabled = false;
       }
     });
+  </script>
+  <script>
+    // Push notification management
+    var pushSubscription = null;
+
+    async function checkPushStatus() {
+      var statusEl = document.getElementById('pushStatus');
+      var toggleEl = document.getElementById('pushToggle');
+
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        statusEl.textContent = 'Push notifications are not supported in this browser.';
+        return;
+      }
+
+      try {
+        var keyRes = await fetch('/api/push/vapid-key');
+        var keyData = await keyRes.json();
+        if (!keyRes.ok) {
+          statusEl.textContent = 'Push notifications are not configured on the server.';
+          return;
+        }
+
+        var reg = await navigator.serviceWorker.register('/sw.js');
+        var sub = await reg.pushManager.getSubscription();
+        pushSubscription = sub;
+
+        if (sub) {
+          statusEl.textContent = 'Notifications are enabled. You will receive alerts on this device.';
+          toggleEl.textContent = 'Disable notifications';
+          toggleEl.style.display = '';
+          toggleEl.style.background = 'transparent';
+          toggleEl.style.color = 'var(--ink-muted)';
+          toggleEl.style.border = '1px solid var(--rule-strong)';
+        } else {
+          statusEl.textContent = 'Notifications are not enabled on this device.';
+          toggleEl.textContent = 'Enable notifications';
+          toggleEl.style.display = '';
+          toggleEl.style.background = '';
+          toggleEl.style.color = '';
+          toggleEl.style.border = '';
+        }
+      } catch (err) {
+        statusEl.textContent = 'Could not check notification status.';
+      }
+    }
+
+    async function togglePush() {
+      var statusEl = document.getElementById('pushStatus');
+      var toggleEl = document.getElementById('pushToggle');
+      toggleEl.disabled = true;
+
+      try {
+        if (pushSubscription) {
+          // Unsubscribe
+          await AuthGuard.fetch('/api/push/unsubscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint: pushSubscription.endpoint }),
+          });
+          await pushSubscription.unsubscribe();
+          pushSubscription = null;
+          statusEl.textContent = 'Notifications disabled.';
+          toggleEl.textContent = 'Enable notifications';
+          toggleEl.style.background = '';
+          toggleEl.style.color = '';
+          toggleEl.style.border = '';
+        } else {
+          // Subscribe
+          var perm = await Notification.requestPermission();
+          if (perm !== 'granted') {
+            statusEl.textContent = 'Permission denied. Enable notifications in your browser settings.';
+            toggleEl.disabled = false;
+            return;
+          }
+
+          var keyRes = await fetch('/api/push/vapid-key');
+          var keyData = await keyRes.json();
+
+          var reg = await navigator.serviceWorker.ready;
+          var sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: keyData.key,
+          });
+
+          await AuthGuard.fetch('/api/push/subscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              endpoint: sub.endpoint,
+              keys: {
+                p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(sub.getKey('p256dh')))),
+                auth: btoa(String.fromCharCode.apply(null, new Uint8Array(sub.getKey('auth')))),
+              },
+            }),
+          });
+
+          pushSubscription = sub;
+          statusEl.textContent = 'Notifications enabled! You will receive alerts on this device.';
+          toggleEl.textContent = 'Disable notifications';
+          toggleEl.style.background = 'transparent';
+          toggleEl.style.color = 'var(--ink-muted)';
+          toggleEl.style.border = '1px solid var(--rule-strong)';
+        }
+      } catch (err) {
+        statusEl.textContent = 'Something went wrong. Try again.';
+      }
+      toggleEl.disabled = false;
+    }
+
+    // Check on page load
+    checkPushStatus();
   </script>
 
   <div class="bottom-tabs">
