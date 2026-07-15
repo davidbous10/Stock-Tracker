@@ -9,6 +9,17 @@ const express = require('express');
 const path = require('path');
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
+const webpush = require('web-push');
+
+// Web Push: configure VAPID keys for browser push notifications.
+// If the keys aren't set yet, push features just silently skip.
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    'mailto:alerts@tradetrack.app',
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+}
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 
@@ -205,6 +216,19 @@ async function initDb(retries = 10, delayMs = 3000) {
           action TEXT NOT NULL,
           detail TEXT,
           created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+
+      // Push notification subscriptions
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS push_subscriptions (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id),
+          endpoint TEXT NOT NULL,
+          keys_p256dh TEXT NOT NULL,
+          keys_auth TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT NOW(),
+          UNIQUE(user_id, endpoint)
         )
       `);
       await pool.query(`
@@ -930,12 +954,14 @@ async function checkAlertsForTicker(ticker, quote) {
 
     if (isOneTime) {
       await sendAlertEmail(alert, quote);
+      await sendPushToUser(alert.user_id, `${alert.ticker} Alert`, `${alert.ticker} is at $${quote.price.toFixed(2)} (${alertDescription(alert)})`);
       await pool.query('UPDATE alerts SET active = false, last_triggered_at = NOW() WHERE id = $1', [alert.id]);
     } else {
       const cooledDown = !alert.last_triggered_at ||
         (Date.now() - new Date(alert.last_triggered_at).getTime()) > ALERT_COOLDOWN_MS;
       if (cooledDown) {
         await sendAlertEmail(alert, quote);
+        await sendPushToUser(alert.user_id, `${alert.ticker} Alert`, `${alert.ticker} is at $${quote.price.toFixed(2)} (${alertDescription(alert)})`);
         await pool.query('UPDATE alerts SET last_triggered_at = NOW() WHERE id = $1', [alert.id]);
       }
     }
@@ -1748,6 +1774,77 @@ Guidelines:
     res.status(500).json({ error: 'Something went wrong. Try again.' });
   }
 });
+
+// ------------------------------------------------------------
+// PUSH NOTIFICATIONS - subscribe/unsubscribe and VAPID public key
+// ------------------------------------------------------------
+app.get('/api/push/vapid-key', (req, res) => {
+  if (!process.env.VAPID_PUBLIC_KEY) {
+    return res.status(500).json({ error: 'Push notifications not configured' });
+  }
+  res.json({ key: process.env.VAPID_PUBLIC_KEY });
+});
+
+app.post('/api/push/subscribe', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  const { endpoint, keys } = req.body;
+  if (!endpoint || !keys || !keys.p256dh || !keys.auth) {
+    return res.status(400).json({ error: 'Invalid subscription data' });
+  }
+  try {
+    await pool.query(
+      `INSERT INTO push_subscriptions (user_id, endpoint, keys_p256dh, keys_auth)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, endpoint) DO UPDATE SET keys_p256dh = $3, keys_auth = $4`,
+      [req.session.userId, endpoint, keys.p256dh, keys.auth]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+app.post('/api/push/unsubscribe', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  const { endpoint } = req.body;
+  if (!endpoint) return res.status(400).json({ error: 'No endpoint' });
+  try {
+    await pool.query(
+      'DELETE FROM push_subscriptions WHERE user_id = $1 AND endpoint = $2',
+      [req.session.userId, endpoint]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Send push notification to all of a user's subscriptions.
+// Called from the scheduled alert job.
+async function sendPushToUser(userId, title, body) {
+  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return;
+  try {
+    const { rows: subs } = await pool.query(
+      'SELECT endpoint, keys_p256dh, keys_auth FROM push_subscriptions WHERE user_id = $1',
+      [userId]
+    );
+    const payload = JSON.stringify({ title, body });
+    for (const sub of subs) {
+      const pushSub = {
+        endpoint: sub.endpoint,
+        keys: { p256dh: sub.keys_p256dh, auth: sub.keys_auth },
+      };
+      try {
+        await webpush.sendNotification(pushSub, payload);
+      } catch (err) {
+        // If the subscription is expired/invalid (410 Gone), remove it
+        if (err.statusCode === 410 || err.statusCode === 404) {
+          await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]);
+        }
+      }
+    }
+  } catch (err) {}
+}
 
 app.get('/api/health', async (req, res) => {
   let hasDatabase = false;
