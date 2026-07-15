@@ -35,7 +35,7 @@ let dbReady = false;
 
 function requireDb(res) {
   if (!dbReady) {
-    res.status(503).json({ error: 'Database is still starting up — try again in a few seconds' });
+    res.status(503).json({ error: 'Database is still starting up. Try again in a few seconds.' });
     return false;
   }
   return true;
@@ -57,7 +57,7 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     maxAge: 30 * 24 * 60 * 60 * 1000,   // 30 days
-    httpOnly: true,                     // JavaScript can't read this cookie — blocks a common attack
+    httpOnly: true,                     // JavaScript can't read this cookie. Blocks a common attack
     secure: !isLocal,                   // HTTPS-only in production; Railway terminates HTTPS for us
     sameSite: 'lax',
   },
@@ -483,7 +483,7 @@ app.post('/api/watchlist', requireAuth, async (req, res) => {
         [raw, quote.price]
       );
     }
-  } catch (err) {} // non-critical — the background job will catch it
+  } catch (err) {} // non-critical, the background job will catch it
 
   const items = await getAllWatchlistItems(userId);
   res.json({ items });
@@ -1258,7 +1258,7 @@ const CHAT_TOOLS = [
   },
   {
     name: 'get_stock_quote',
-    description: 'Get a live price quote for any stock ticker — including ones NOT on the user\'s watchlist. Use this when the user asks about a stock\'s current price that isn\'t in the watchlist context, or when you need fresh data.',
+    description: 'Get a live price quote for any stock ticker, including ones NOT on the user\'s watchlist. Use this when the user asks about a stock\'s current price that isn\'t in the watchlist context, or when you need fresh data.',
     input_schema: {
       type: 'object',
       properties: {
@@ -1324,7 +1324,7 @@ async function executeChatTool(toolName, input, userId) {
 
 app.post('/api/chat', requireAuth, async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: 'AI assistant is not configured — add ANTHROPIC_API_KEY in Railway' });
+    return res.status(500).json({ error: 'AI assistant is not configured. Add ANTHROPIC_API_KEY in Railway.' });
   }
   if (!requireDb(res)) return;
 
@@ -1365,7 +1365,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 
     const userName = req.session.userName || req.session.userEmail;
 
-    const systemPrompt = `You are the Trade Track AI assistant — a knowledgeable, concise stock market companion built into a personal stock tracking app called Trade Track.
+    const systemPrompt = `You are the Trade Track AI assistant, a knowledgeable, concise stock market companion built into a personal stock tracking app called Trade Track.
 
 The user's name is ${userName}.
 
@@ -1379,7 +1379,7 @@ You have tools to take actions:
 Guidelines:
 - Be concise and direct. Short paragraphs, not walls of text.
 - When using tools, always confirm the result to the user naturally.
-- If the user asks to add/remove a stock, use the tool — don't just tell them to do it manually.
+- If the user asks to add/remove a stock, use the tool. Don't just tell them to do it manually.
 - For questions about specific stocks, check if you have the data in the watchlist above. If not, use get_stock_quote to look it up before answering.
 - Always include a brief disclaimer when giving anything that could be read as investment advice.
 - Keep responses under 200 words unless the question clearly needs more depth.
@@ -1408,7 +1408,7 @@ Guidelines:
 
     if (!response.ok) {
       console.error('Anthropic API error:', data);
-      return res.status(502).json({ error: 'AI service error — try again in a moment' });
+      return res.status(502).json({ error: 'AI service error. Try again in a moment.' });
     }
 
     // Handle tool use loop (up to 3 rounds to prevent runaway)
@@ -1449,7 +1449,7 @@ Guidelines:
 
       if (!response.ok) {
         console.error('Anthropic API error (tool round):', data);
-        return res.status(502).json({ error: 'AI service error — try again in a moment' });
+        return res.status(502).json({ error: 'AI service error. Try again in a moment.' });
       }
     }
 
@@ -1466,7 +1466,7 @@ Guidelines:
     res.json({ reply, watchlistChanged });
   } catch (err) {
     console.error('Chat error:', err.message);
-    res.status(500).json({ error: 'Something went wrong — try again' });
+    res.status(500).json({ error: 'Something went wrong. Try again.' });
   }
 });
 
