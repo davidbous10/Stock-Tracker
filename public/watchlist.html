@@ -1022,8 +1022,18 @@
     function sparklineHtml(ticker) {
       const points = historyByTicker[ticker];
 
-      if (!points || points.length < 2) {
-        return `<div class="sparkline-empty">Collecting history — check back soon</div>`;
+      if (!points || points.length === 0) {
+        return `<div class="sparkline-empty">Waiting for first snapshot…</div>`;
+      }
+
+      if (points.length === 1) {
+        // One snapshot — show as a flat line with the price
+        return `
+          <svg class="sparkline" viewBox="0 0 100 32" preserveAspectRatio="none">
+            <line x1="0" y1="16" x2="100" y2="16" stroke="var(--ink-faint)" stroke-width="1" stroke-dasharray="3,3" />
+          </svg>
+          <div class="sparkline-label">$${points[0].price.toFixed(2)} · just added</div>
+        `;
       }
 
       const width = 100, height = 32;
