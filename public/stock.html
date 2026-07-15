@@ -461,7 +461,7 @@
     }
 
     function fmtNum(n) {
-      if (n == null) return '—';
+      if (n == null) return '-';
       // Finnhub returns marketCap in millions (e.g. 4631217 = $4.63T)
       if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'T';
       if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'B';
@@ -469,7 +469,7 @@
     }
 
     function fmtVol(n) {
-      if (n == null) return '—';
+      if (n == null) return '-';
       return n.toFixed(1) + 'M';
     }
 
@@ -494,7 +494,7 @@
     }
 
     function initStockPage() {
-      document.title = `${SYMBOL} — Trade Track`;
+      document.title = `${SYMBOL} | Trade Track`;
       loadProfile();
       loadQuote();
       loadChart();
@@ -602,7 +602,7 @@
         }
 
         window._quote = q;
-        document.title = `${SYMBOL} $${q.price.toFixed(2)} — Trade Track`;
+        document.title = `${SYMBOL} $${q.price.toFixed(2)} | Trade Track`;
         renderHeader(window._profile || null, q);
         renderStats(q, window._profile || null);
       } catch (err) {}
@@ -695,12 +695,12 @@
         window._chartPoints = points;
 
         if (points.length === 0) {
-          el.innerHTML = `<div class="chart-card"><div class="chart-label">Price history</div><div class="chart-empty">Waiting for first snapshot — data updates every 15 minutes</div></div>`;
+          el.innerHTML = `<div class="chart-card"><div class="chart-label">Price history</div><div class="chart-empty">Waiting for first snapshot. Data updates every 15 minutes.</div></div>`;
           return;
         }
 
         if (points.length === 1) {
-          el.innerHTML = `<div class="chart-card"><div class="chart-label">Price history · $${points[0].price.toFixed(2)}</div><div class="chart-empty">One snapshot so far — the chart will draw once more data comes in (updates every 15 min)</div></div>`;
+          el.innerHTML = `<div class="chart-card"><div class="chart-label">Price history · $${points[0].price.toFixed(2)}</div><div class="chart-empty">One snapshot so far. The chart will draw once more data comes in (updates every 15 min).</div></div>`;
           return;
         }
 
@@ -900,11 +900,11 @@
       if (signals.length === 0) {
         overall = 'Not enough data to generate a signal for ' + SYMBOL + ' yet. Check back once price history has accumulated.';
       } else if (bullishCount > bearishCount && bullishCount > neutralCount) {
-        overall = SYMBOL + ' is showing mostly bullish signals — analysts lean positive, and the price action supports it. That said, no single set of indicators tells the whole story.';
+        overall = SYMBOL + ' is showing mostly bullish signals. Analysts lean positive, and the price action supports it. That said, no single set of indicators tells the whole story.';
       } else if (bearishCount > bullishCount && bearishCount > neutralCount) {
         overall = SYMBOL + ' is showing mostly bearish signals right now. The data suggests caution, though conditions can shift quickly.';
       } else {
-        overall = SYMBOL + ' is showing mixed signals — some indicators lean positive, others lean negative. It may be worth waiting for a clearer trend before making a move.';
+        overall = SYMBOL + ' is showing mixed signals. Some indicators lean positive, others lean negative. It may be worth waiting for a clearer trend before making a move.';
       }
 
       html += `<div class="analysis-summary">${esc(overall)}</div>`;
