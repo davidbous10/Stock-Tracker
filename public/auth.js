@@ -151,7 +151,12 @@ const AuthGuard = (function () {
   async function init(callback) {
     onReadyCallback = callback;
     wireAuthForm();
-    setAuthMode('login');
+
+    // The landing page defaults to signup (for new visitors), while
+    // other pages default to login. Respect whatever mode the HTML
+    // set on the submit button; only default to login if not set.
+    const currentMode = document.getElementById('authSubmit').dataset.mode;
+    if (!currentMode) setAuthMode('login');
 
     // INSTANT PATH: if we've logged in before on this tab, show the
     // app immediately using cached email/name. No network wait.
