@@ -473,6 +473,18 @@ app.post('/api/watchlist', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Database error' });
   }
 
+  // Immediately snapshot the price so the sparkline has data right
+  // away instead of showing "collecting data — check back soon".
+  try {
+    const quote = await fetchQuote(raw);
+    if (quote.price) {
+      await pool.query(
+        'INSERT INTO price_history (ticker, price) VALUES ($1, $2)',
+        [raw, quote.price]
+      );
+    }
+  } catch (err) {} // non-critical — the background job will catch it
+
   const items = await getAllWatchlistItems(userId);
   res.json({ items });
 });
@@ -1276,6 +1288,11 @@ async function executeChatTool(toolName, input, userId) {
           'INSERT INTO watchlist (ticker, sort_order, user_id) VALUES ($1, $2, $3)',
           [ticker, maxRows[0].next, userId]
         );
+        // Immediate price snapshot for sparkline
+        try {
+          const q = await fetchQuote(ticker);
+          if (q.price) await pool.query('INSERT INTO price_history (ticker, price) VALUES ($1, $2)', [ticker, q.price]);
+        } catch (e) {}
         return { result: `${ticker} has been added to the watchlist.` };
       } catch (err) {
         return { error: `Could not add ${ticker}: ${err.message}` };
