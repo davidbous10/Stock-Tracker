@@ -1419,6 +1419,41 @@ const CHAT_TOOLS = [
       required: ['ticker'],
     },
   },
+  {
+    name: 'get_financials',
+    description: 'Get detailed financial metrics for a company: PE ratio, EPS, revenue, profit margins, cash per share, debt/equity, dividend yield, beta, 52-week range, and more. Use when the user asks about fundamentals, valuation, financials, DCF, or whether a stock is overvalued/undervalued. The AI should use these numbers to provide analysis.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        ticker: { type: 'string', description: 'Stock ticker symbol' },
+      },
+      required: ['ticker'],
+    },
+  },
+  {
+    name: 'get_chart_data',
+    description: 'Get price history data points for a stock to display as an inline chart in the chat. Use when the user asks to see a chart, graph, price history, or trend visualization. Returns data that will be rendered as a visual chart in the chat. Always use this when the user says "show me a chart" or "graph" or "price history."',
+    input_schema: {
+      type: 'object',
+      properties: {
+        ticker: { type: 'string', description: 'Stock ticker symbol' },
+      },
+      required: ['ticker'],
+    },
+  },
+  {
+    name: 'set_alert',
+    description: 'Set a price alert for a stock. Use when the user says things like "alert me if X drops below $200" or "notify me when TSLA hits $300." Condition types: price_below, price_above, drops_pct, rises_pct.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        ticker: { type: 'string', description: 'Stock ticker symbol' },
+        condition: { type: 'string', enum: ['price_below', 'price_above', 'drops_pct', 'rises_pct'], description: 'Alert condition type' },
+        threshold: { type: 'number', description: 'Threshold value (dollar amount for price alerts, percentage for pct alerts)' },
+      },
+      required: ['ticker', 'condition', 'threshold'],
+    },
+  },
 ];
 
 async function executeChatTool(toolName, input, userId) {
@@ -1468,6 +1503,94 @@ async function executeChatTool(toolName, input, userId) {
       return {
         result: `${ticker}: $${quote.price.toFixed(2)}, ${quote.changePercent > 0 ? '+' : ''}${quote.changePercent.toFixed(2)}% today, range $${quote.dayLow.toFixed(2)}-$${quote.dayHigh.toFixed(2)}, open $${quote.dayOpen.toFixed(2)}`
       };
+    }
+    case 'get_financials': {
+      if (!process.env.FINNHUB_API_KEY) return { error: 'No API key configured' };
+      try {
+        const [metricRes, profileRes] = await Promise.all([
+          fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${ticker}&metric=all&token=${process.env.FINNHUB_API_KEY}`).then(r => r.json()),
+          fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${ticker}&token=${process.env.FINNHUB_API_KEY}`).then(r => r.json()),
+        ]);
+        const m = metricRes.metric || {};
+        const p = profileRes || {};
+        const data = {
+          company: p.name || ticker,
+          industry: p.finnhubIndustry || 'N/A',
+          marketCap: p.marketCapitalization ? `$${(p.marketCapitalization / 1e3).toFixed(1)}B` : 'N/A',
+          peRatio: m.peNormalizedAnnual || m.peTTM || 'N/A',
+          epsAnnual: m.epsNormalizedAnnual || m.epsTTM || 'N/A',
+          revenuePerShare: m.revenuePerShareAnnual || 'N/A',
+          profitMargin: m.netProfitMarginTTM ? `${m.netProfitMarginTTM.toFixed(1)}%` : 'N/A',
+          grossMargin: m.grossMarginTTM ? `${m.grossMarginTTM.toFixed(1)}%` : 'N/A',
+          operatingMargin: m.operatingMarginTTM ? `${m.operatingMarginTTM.toFixed(1)}%` : 'N/A',
+          roe: m.roeTTM ? `${m.roeTTM.toFixed(1)}%` : 'N/A',
+          roa: m.roaTTM ? `${m.roaTTM.toFixed(1)}%` : 'N/A',
+          debtToEquity: m.totalDebtToEquityQuarterly || 'N/A',
+          currentRatio: m.currentRatioQuarterly || 'N/A',
+          cashPerShare: m.cashPerSharePerShareQuarterly || 'N/A',
+          dividendYield: m.dividendYieldIndicatedAnnual ? `${m.dividendYieldIndicatedAnnual.toFixed(2)}%` : 'N/A',
+          beta: m.beta || 'N/A',
+          weekHigh52: m['52WeekHigh'] ? `$${m['52WeekHigh'].toFixed(2)}` : 'N/A',
+          weekLow52: m['52WeekLow'] ? `$${m['52WeekLow'].toFixed(2)}` : 'N/A',
+          avgVolume10d: m['10DayAverageTradingVolume'] ? `${m['10DayAverageTradingVolume'].toFixed(1)}M` : 'N/A',
+          revenueGrowth3y: m.revenueGrowth3Y ? `${m.revenueGrowth3Y.toFixed(1)}%` : 'N/A',
+          epsGrowth3y: m.epsGrowth3Y ? `${m.epsGrowth3Y.toFixed(1)}%` : 'N/A',
+          freeCashFlowPerShare: m.fcfPerShareTTM || 'N/A',
+        };
+        return { result: JSON.stringify(data) };
+      } catch (err) {
+        return { error: `Could not fetch financials for ${ticker}` };
+      }
+    }
+    case 'get_chart_data': {
+      try {
+        const { rows } = await pool.query(
+          'SELECT price, recorded_at FROM price_history WHERE ticker = $1 ORDER BY recorded_at ASC',
+          [ticker]
+        );
+        if (rows.length === 0) {
+          return { result: JSON.stringify({ ticker, points: [], message: 'No price history available yet. The stock may need to be added to the watchlist first so the server starts collecting snapshots.' }) };
+        }
+        const points = rows.map(r => ({ price: parseFloat(r.price), time: r.recorded_at }));
+        const prices = points.map(p => p.price);
+        return {
+          result: JSON.stringify({
+            ticker,
+            points: points.length,
+            first: points[0],
+            last: points[points.length - 1],
+            min: Math.min(...prices).toFixed(2),
+            max: Math.max(...prices).toFixed(2),
+            chartData: points.map(p => p.price),
+          }),
+          _chartRender: {
+            ticker,
+            prices: points.map(p => p.price),
+            startDate: points[0].time,
+            endDate: points[points.length - 1].time,
+          }
+        };
+      } catch (err) {
+        return { error: `Could not fetch chart data for ${ticker}` };
+      }
+    }
+    case 'set_alert': {
+      const condition = input.condition || '';
+      const threshold = input.threshold;
+      if (!condition || threshold == null) return { error: 'Missing condition or threshold' };
+      const validConditions = ['price_below', 'price_above', 'drops_pct', 'rises_pct'];
+      if (!validConditions.includes(condition)) return { error: `Invalid condition. Use: ${validConditions.join(', ')}` };
+      try {
+        await pool.query(
+          'INSERT INTO alerts (ticker, condition_type, threshold, user_id) VALUES ($1, $2, $3, $4)',
+          [ticker, condition, threshold, userId]
+        );
+        const labels = { price_below: 'drops below $', price_above: 'goes above $', drops_pct: 'drops by ', rises_pct: 'rises by ' };
+        const suffix = condition.includes('pct') ? '%' : '';
+        return { result: `Alert set: you'll be notified when ${ticker} ${labels[condition]}${threshold}${suffix}.` };
+      } catch (err) {
+        return { error: `Could not set alert: ${err.message}` };
+      }
     }
     default:
       return { error: 'Unknown tool' };
@@ -1565,6 +1688,7 @@ Guidelines:
 
     // Handle tool use loop (up to 3 rounds to prevent runaway)
     let rounds = 0;
+    let charts = [];
     while (data.stop_reason === 'tool_use' && rounds < 3) {
       rounds++;
       const toolBlocks = data.content.filter(b => b.type === 'tool_use');
@@ -1572,14 +1696,19 @@ Guidelines:
 
       for (const block of toolBlocks) {
         const result = await executeChatTool(block.name, block.input, req.session.userId);
+        // If tool returned chart data, capture it for the frontend
+        if (result._chartRender) {
+          charts.push(result._chartRender);
+        }
+        // Send the text result to the AI (strip internal fields)
+        const forAI = { result: result.result, error: result.error };
         toolResults.push({
           type: 'tool_result',
           tool_use_id: block.id,
-          content: JSON.stringify(result),
+          content: JSON.stringify(forAI),
         });
       }
 
-      // Send tool results back to get the final text response
       apiMessages = [
         ...apiMessages,
         { role: 'assistant', content: data.content },
@@ -1605,18 +1734,15 @@ Guidelines:
       }
     }
 
-    // Extract final text
     const reply = data.content
       .filter(b => b.type === 'text')
       .map(b => b.text)
       .join('\n');
 
-    // Tell the frontend if the watchlist was modified so it can refresh
-    const watchlistChanged = data.content.some(b => b.type === 'tool_use') ||
-      (rounds > 0);
+    const watchlistChanged = rounds > 0;
 
     logActivity(req.session.userId, 'chat', trimmed[trimmed.length - 1].content.slice(0, 100));
-    res.json({ reply, watchlistChanged });
+    res.json({ reply, watchlistChanged, charts });
   } catch (err) {
     console.error('Chat error:', err.message);
     res.status(500).json({ error: 'Something went wrong. Try again.' });
