@@ -138,6 +138,19 @@
     }
     .chat-suggestion:hover { border-color: #17442F; color: #23281F; }
 
+    .chat-chart-label {
+      font-family: 'Courier Prime', monospace;
+      font-size: 10px; font-weight: 700;
+      color: #686C5B; margin-bottom: 6px;
+      letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .chat-chart-svg { width: 100%; height: 80px; display: block; border-radius: 2px; }
+    .chat-chart-dates {
+      display: flex; justify-content: space-between;
+      font-family: 'Courier Prime', monospace;
+      font-size: 9px; color: #9A9C8B; margin-top: 4px;
+    }
+
     @media (max-width: 800px) {
       .chat-fab { bottom: 80px; right: 16px; width: 46px; height: 46px; }
       .chat-panel {
@@ -301,7 +314,13 @@
         addMessage('assistant', data.reply);
         history.push({ role: 'assistant', content: data.reply });
 
-        // If the AI added or removed a stock, refresh the page data
+        // Render any charts the AI requested
+        if (data.charts && data.charts.length > 0) {
+          data.charts.forEach(function (chart) {
+            renderChatChart(chart);
+          });
+        }
+
         if (data.watchlistChanged) {
           refreshPageData();
         }
@@ -315,6 +334,48 @@
     sendBtn.disabled = false;
     inputEl.focus();
   }
+  // Render an inline SVG chart in the chat
+  function renderChatChart(chart) {
+    const prices = chart.prices || [];
+    if (prices.length < 2) return;
+
+    const W = 300, H = 80, pad = 4;
+    const min = Math.min.apply(null, prices);
+    const max = Math.max.apply(null, prices);
+    const range = max - min || 1;
+
+    const coords = prices.map(function (p, i) {
+      var x = pad + (i / (prices.length - 1)) * (W - 2 * pad);
+      var y = pad + (1 - (p - min) / range) * (H - 2 * pad);
+      return x.toFixed(1) + ',' + y.toFixed(1);
+    }).join(' ');
+
+    var trendUp = prices[prices.length - 1] >= prices[0];
+    var stroke = trendUp ? '#1D6A43' : '#8C2F2B';
+    var fillId = 'cf' + Date.now();
+
+    var areaCoords = coords + ' ' + (W - pad) + ',' + H + ' ' + pad + ',' + H;
+
+    var startDate = new Date(chart.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    var endDate = new Date(chart.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+    var div = document.createElement('div');
+    div.className = 'chat-msg assistant';
+    div.innerHTML = '<div class="chat-chart-label">' + esc(chart.ticker) + ' &middot; $' + min.toFixed(2) + ' &ndash; $' + max.toFixed(2) + '</div>' +
+      '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chat-chart-svg" preserveAspectRatio="none">' +
+      '<defs><linearGradient id="' + fillId + '" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0%" stop-color="' + stroke + '" stop-opacity="0.2"/>' +
+      '<stop offset="100%" stop-color="' + stroke + '" stop-opacity="0.02"/>' +
+      '</linearGradient></defs>' +
+      '<polygon points="' + areaCoords + '" fill="url(#' + fillId + ')" />' +
+      '<polyline points="' + coords + '" fill="none" stroke="' + stroke + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />' +
+      '</svg>' +
+      '<div class="chat-chart-dates"><span>' + startDate + '</span><span>' + endDate + '</span></div>';
+
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
   // When the AI adds/removes a stock, refresh the current page's
   // data so the user sees the change without manually reloading.
   function refreshPageData() {
