@@ -1,5 +1,5 @@
 // ============================================================
-// chat.js — Trade Track AI assistant widget.
+// chat.js — Trackr assistant widget.
 //
 // Self-contained: injects its own CSS and DOM into whatever page
 // loads it. Just add <script src="/chat.js"></script> after
@@ -158,7 +158,7 @@
   panel.innerHTML = `
     <div class="chat-header">
       <div class="chat-header-dot"></div>
-      Trade Track AI
+      Trackr
     </div>
     <div class="chat-messages" id="chatMessages">
       <div class="chat-welcome">
@@ -181,7 +181,7 @@
   const fab = document.createElement('button');
   fab.className = 'chat-fab';
   fab.id = 'chatFab';
-  fab.title = 'Trade Track AI';
+  fab.title = 'Trackr';
   fab.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
 
   document.body.appendChild(panel);
