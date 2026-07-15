@@ -1273,9 +1273,9 @@
 
       // Update the browser tab: "3↑ 2↓ — Trade Track"
       if (up + down > 0) {
-        document.title = `${up}↑ ${down}↓ · ${items.length} stocks — Trade Track`;
+        document.title = `${up}↑ ${down}↓ · ${items.length} stocks | Trade Track`;
       } else {
-        document.title = `${items.length} stocks — Trade Track`;
+        document.title = `${items.length} stocks | Trade Track`;
       }
 
       listEl.innerHTML = items.map(cardHtml).join('');
@@ -1637,7 +1637,7 @@
     listEl.addEventListener('dragover', e => {
       const card = e.target.closest('.card');
       if (!card || !draggedTicker || card.dataset.ticker === draggedTicker) return;
-      e.preventDefault();   // required — tells the browser "yes, a drop is allowed here"
+      e.preventDefault();   // required: tells the browser "yes, a drop is allowed here"
 
       // Which half of the target card is the cursor over? That decides
       // whether the dragged card would land above or below it.
@@ -1671,7 +1671,7 @@
       const targetIndex = items.findIndex(i => i.ticker === targetTicker);
       items.splice(isAfter ? targetIndex + 1 : targetIndex, 0, moved);
 
-      render();       // safe now — the drag gesture has already ended
+      render();       // safe now, the drag gesture has already ended
       saveOrder();    // persist the new order to the database
     });
 
