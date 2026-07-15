@@ -3,7 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Trade Track</title>
+  <title>Trade Track — Your Personal Stock Tracker</title>
+  <meta name="description" content="Track stocks, get AI-powered analysis, and stay on top of the market with Trade Track. Live prices, sparkline charts, news, sector performance, and a built-in AI assistant." />
+  <meta name="theme-color" content="#17442F" />
+  <meta property="og:title" content="Trade Track — Your Personal Stock Tracker" />
+  <meta property="og:description" content="Live prices, AI analysis, news, and sector performance. Your stocks, one dashboard." />
+  <meta property="og:type" content="website" />
   <link rel="icon" href="/logo.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Archivo:wght@400;500;600;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
@@ -537,32 +542,105 @@
       body { padding: 20px 16px 0; }
     }
 
+    /* ---- Landing page (logged-out visitors) ---- */
+    .landing {
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 40px 24px;
+      text-align: center;
+    }
+    .landing-hero { max-width: 520px; margin-bottom: 40px; }
+    .landing-logo { margin-bottom: 20px; }
+    .landing-title {
+      font-family: var(--font-display);
+      font-size: 38px; font-weight: 400;
+      letter-spacing: -0.01em; line-height: 1.2;
+      margin-bottom: 14px;
+    }
+    .landing-sub {
+      font-size: 16px; color: var(--ink-muted);
+      line-height: 1.6; max-width: 420px; margin: 0 auto;
+    }
+    .landing-features {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 16px; max-width: 640px; margin-bottom: 40px;
+    }
+    .landing-feature {
+      background: var(--paper-raise);
+      border: 1px solid var(--rule-strong);
+      border-radius: 3px; padding: 20px 16px;
+      box-shadow: var(--shadow-paper);
+    }
+    .landing-feature-icon { margin-bottom: 10px; color: var(--green); }
+    .landing-feature-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+    .landing-feature-desc { font-size: 12px; color: var(--ink-muted); line-height: 1.45; }
+    .landing-auth { width: 100%; max-width: 380px; }
+    .landing-footer {
+      margin-top: 32px; font-size: 11px; color: var(--ink-faint);
+    }
+
+    @media (max-width: 640px) {
+      .landing-title { font-size: 28px; }
+      .landing-features { grid-template-columns: 1fr; max-width: 320px; }
+    }
   </style>
 </head>
 <body>
-  <div class="auth-screen" id="authScreen" style="display:none">
-    <div class="auth-card">
-      <div class="brand-row">
-        <img src="/logo.svg" alt="" class="brand-mark" width="36" height="36" />
-        <div>
-          <div class="eyebrow">Private ledger</div>
-          <h1>Trade Track</h1>
+  <div class="landing" id="authScreen" style="display:none">
+    <div class="landing-hero">
+      <div class="landing-logo">
+        <img src="/logo.svg" alt="Trade Track" width="56" height="56" />
+      </div>
+      <h1 class="landing-title">Your stocks, one dashboard.</h1>
+      <p class="landing-sub">
+        Track prices, read the news, analyze trends, and ask an AI assistant about your portfolio — all in one place.
+      </p>
+    </div>
+
+    <div class="landing-features">
+      <div class="landing-feature">
+        <div class="landing-feature-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="19" x2="4" y2="10"/><line x1="10" y1="19" x2="10" y2="4"/><line x1="16" y1="19" x2="16" y2="14"/></svg>
         </div>
+        <div class="landing-feature-title">Live Prices</div>
+        <div class="landing-feature-desc">Real-time quotes, sparkline charts, and day range for every stock you track.</div>
       </div>
-
-      <div class="auth-tabs">
-        <button class="auth-tab active" id="tabLogin">Log in</button>
-        <button class="auth-tab" id="tabSignup">Sign up</button>
+      <div class="landing-feature">
+        <div class="landing-feature-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <div class="landing-feature-title">AI Assistant</div>
+        <div class="landing-feature-desc">Ask Trackr about your stocks, get analysis, and manage your watchlist by chat.</div>
       </div>
+      <div class="landing-feature">
+        <div class="landing-feature-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <div class="landing-feature-title">News & Analysis</div>
+        <div class="landing-feature-desc">Market headlines, per-stock news, analyst consensus, and sector performance.</div>
+      </div>
+    </div>
 
-      <form id="authForm">
-        <input type="text" id="authName" placeholder="First name" autocomplete="given-name" style="display:none" />
-        <input type="email" id="authEmail" placeholder="Email" autocomplete="email" required />
-        <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password" required />
-        <div class="auth-hint" id="authHint"></div>
-        <div class="auth-msg" id="authMsg"></div>
-        <button type="submit" class="btn-auth-submit" id="authSubmit">Log in</button>
-      </form>
+    <div class="landing-auth">
+      <div class="auth-card">
+        <div class="auth-tabs">
+          <button class="auth-tab" id="tabLogin">Log in</button>
+          <button class="auth-tab active" id="tabSignup">Sign up</button>
+        </div>
+        <form id="authForm">
+          <input type="text" id="authName" placeholder="First name" autocomplete="given-name" />
+          <input type="email" id="authEmail" placeholder="Email" autocomplete="email" required />
+          <input type="password" id="authPassword" placeholder="Password" autocomplete="new-password" required />
+          <div class="auth-hint" id="authHint">Password must be at least 8 characters</div>
+          <div class="auth-msg" id="authMsg"></div>
+          <button type="submit" class="btn-auth-submit" id="authSubmit" data-mode="signup">Sign up</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="landing-footer">
+      Free to use · No credit card required
     </div>
   </div>
 
