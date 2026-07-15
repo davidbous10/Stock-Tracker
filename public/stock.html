@@ -692,8 +692,13 @@
         const points = data.points || [];
         window._chartPoints = points;
 
-        if (points.length < 2) {
-          el.innerHTML = `<div class="chart-card"><div class="chart-label">Price history</div><div class="chart-empty">Collecting data — the chart will appear once there are enough snapshots</div></div>`;
+        if (points.length === 0) {
+          el.innerHTML = `<div class="chart-card"><div class="chart-label">Price history</div><div class="chart-empty">Waiting for first snapshot — data updates every 15 minutes</div></div>`;
+          return;
+        }
+
+        if (points.length === 1) {
+          el.innerHTML = `<div class="chart-card"><div class="chart-label">Price history · $${points[0].price.toFixed(2)}</div><div class="chart-empty">One snapshot so far — the chart will draw once more data comes in (updates every 15 min)</div></div>`;
           return;
         }
 
