@@ -536,15 +536,15 @@
         <div class="section-desc">Your basic account details</div>
         <div class="settings-row">
           <span class="label">Email</span>
-          <span class="value" id="settingsEmail">—</span>
+          <span class="value" id="settingsEmail">-</span>
         </div>
         <div class="settings-row">
           <span class="label">Name</span>
-          <span class="value" id="settingsName">—</span>
+          <span class="value" id="settingsName">-</span>
         </div>
         <div class="settings-row">
           <span class="label">Member since</span>
-          <span class="value" id="settingsSince">—</span>
+          <span class="value" id="settingsSince">-</span>
         </div>
       </div>
 
@@ -576,7 +576,7 @@
           Price alerts (set from any stock's bell icon on your Watchlist) are emailed to
           <strong id="settingsEmailInline">your account email</strong>.
           Delivery currently requires that address to match the one this app's email
-          sending is verified with — if alerts aren't arriving, that's the most likely reason.
+          sending is verified with, so if alerts aren't arriving, that's the most likely reason.
         </div>
       </div>
 
@@ -598,7 +598,7 @@
     async function initSettingsPage(email, name) {
       document.getElementById('settingsEmail').textContent = email;
       document.getElementById('settingsEmailInline').textContent = email;
-      document.getElementById('settingsName').textContent = name || '—';
+      document.getElementById('settingsName').textContent = name || '-';
 
       // Pre-fill the change name field so the user sees what they have
       if (name) {
@@ -612,13 +612,13 @@
           document.getElementById('settingsSince').textContent =
             new Date(data.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
         } else {
-          document.getElementById('settingsSince').textContent = '—';
+          document.getElementById('settingsSince').textContent = '-';
         }
       } catch (err) {
-        document.getElementById('settingsSince').textContent = '—';
+        document.getElementById('settingsSince').textContent = '-';
       }
 
-      // Admin panel — only loads for the creator (user_id = 1).
+      // Admin panel: only loads for the creator (user_id = 1).
       // If the request returns 403, we just leave the section hidden.
       try {
         const adminRes = await AuthGuard.fetch('/api/admin/stats');
