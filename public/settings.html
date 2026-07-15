@@ -625,22 +625,36 @@
         if (adminRes.ok) {
           const stats = await adminRes.json();
           document.getElementById('adminSection').style.display = '';
-          const users = stats.recentSignups || [];
+          const users = stats.users || [];
           document.getElementById('adminStats').innerHTML = `
             <div class="settings-row">
               <span class="label">Total users</span>
               <span class="value">${stats.totalUsers}</span>
             </div>
             <div class="settings-row">
-              <span class="label">Distinct tickers tracked</span>
-              <span class="value">${stats.totalDistinctTickers}</span>
+              <span class="label">Stocks tracked</span>
+              <span class="value">${stats.totalTickers}</span>
             </div>
-            ${users.map(u => `
-              <div class="settings-row">
-                <span class="label" style="font-size:12px">${u.email}${u.name ? ' (' + u.name + ')' : ''}</span>
-                <span class="value" style="font-size:11px;color:var(--ink-faint)">${new Date(u.joinedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-              </div>
-            `).join('')}
+            <div class="settings-row">
+              <span class="label">Alerts set</span>
+              <span class="value">${stats.totalAlerts}</span>
+            </div>
+            <div class="settings-row">
+              <span class="label">Saved articles</span>
+              <span class="value">${stats.totalSavedArticles}</span>
+            </div>
+            <div style="border-top:1px solid var(--rule-strong);margin-top:12px;padding-top:12px">
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--ink-faint);margin-bottom:8px">Recent signups</div>
+              ${users.map(u => `
+                <div class="settings-row">
+                  <span class="label" style="font-size:12px">${u.email}${u.name ? ' (' + u.name + ')' : ''}</span>
+                  <span class="value" style="font-size:11px;color:var(--ink-faint)">${new Date(u.joinedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                </div>
+              `).join('')}
+            </div>
+            <div style="margin-top:12px">
+              <a href="/admin.html" style="color:var(--green);font-size:12px;font-weight:600;text-decoration:none">Open full admin dashboard &rarr;</a>
+            </div>
           `;
         }
       } catch (err) {}
