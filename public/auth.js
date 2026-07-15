@@ -83,7 +83,7 @@ const AuthGuard = (function () {
   async function authFetch(url, options) {
     const res = await fetch(url, options);
     if (res.status === 401) {
-      showLogin('Your session expired — please log in again');
+      showLogin('Your session expired. Please log in again.');
     }
     return res;
   }
