@@ -200,6 +200,95 @@
   document.body.appendChild(panel);
   document.body.appendChild(fab);
 
+  // ---- Global search: inject into sidebar ----
+  var sidebar = document.querySelector('.sidebar .side-nav');
+  if (sidebar) {
+    var searchWrap = document.createElement('div');
+    searchWrap.className = 'sidebar-search';
+    searchWrap.innerHTML = '<div class="ss-input-wrap"><svg class="ss-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input class="ss-input" id="globalSearch" type="text" placeholder="Search stocks..." autocomplete="off" /></div><div class="ss-results" id="globalResults"></div>';
+    sidebar.parentNode.insertBefore(searchWrap, sidebar.nextSibling);
+  }
+
+  // Search CSS
+  var searchStyle = document.createElement('style');
+  searchStyle.textContent = `
+    .sidebar-search { margin-top: 12px; position: relative; }
+    .ss-input-wrap {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(243,238,223,0.1); border: 1px solid rgba(243,238,223,0.2);
+      border-radius: 3px; padding: 0 10px;
+    }
+    .ss-icon { color: #B9C1AC; flex-shrink: 0; }
+    .ss-input {
+      background: none; border: none; color: #F3EEDF;
+      font-size: 12px; font-family: 'Archivo', system-ui, sans-serif;
+      padding: 8px 0; width: 100%; outline: none;
+    }
+    .ss-input::placeholder { color: #7A8B6E; }
+    .ss-results {
+      position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+      background: #FBF7EB; border: 1px solid #C6BEA2;
+      border-radius: 3px; box-shadow: 0 8px 24px rgba(35,40,31,0.2);
+      z-index: 50; display: none; max-height: 240px; overflow-y: auto;
+    }
+    .ss-results.open { display: block; }
+    .ss-result {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; text-decoration: none; color: #23281F;
+      border-bottom: 1px solid #DDD5BE; font-size: 12px;
+    }
+    .ss-result:last-child { border-bottom: none; }
+    .ss-result:hover { background: #FFFDF4; }
+    .ss-result-ticker {
+      font-family: 'Courier Prime', monospace; font-weight: 700;
+      font-size: 12px; min-width: 48px;
+    }
+    .ss-result-name { color: #686C5B; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    @media (max-width: 800px) { .sidebar-search { display: none; } }
+  `;
+  document.head.appendChild(searchStyle);
+
+  // Search logic
+  var searchInput = document.getElementById('globalSearch');
+  var searchResults = document.getElementById('globalResults');
+  var searchTimer = null;
+
+  if (searchInput) {
+    searchInput.addEventListener('input', function () {
+      clearTimeout(searchTimer);
+      var q = searchInput.value.trim();
+      if (q.length < 1) { searchResults.className = 'ss-results'; searchResults.innerHTML = ''; return; }
+      searchTimer = setTimeout(function () { doGlobalSearch(q); }, 300);
+    });
+
+    searchInput.addEventListener('blur', function () {
+      setTimeout(function () { searchResults.className = 'ss-results'; }, 200);
+    });
+
+    searchInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { searchInput.value = ''; searchResults.className = 'ss-results'; }
+    });
+  }
+
+  async function doGlobalSearch(query) {
+    try {
+      var res = await AuthGuard.fetch('/api/search?q=' + encodeURIComponent(query));
+      var data = await res.json();
+      var results = data.results || [];
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div style="padding:10px 12px;font-size:11px;color:#9A9C8B">No results</div>';
+        searchResults.className = 'ss-results open';
+        return;
+      }
+      searchResults.innerHTML = results.slice(0, 6).map(function (r) {
+        return '<a href="/stock.html?t=' + encodeURIComponent(r.symbol) + '" class="ss-result"><span class="ss-result-ticker">' + r.symbol + '</span><span class="ss-result-name">' + r.name + '</span></a>';
+      }).join('');
+      searchResults.className = 'ss-results open';
+    } catch (err) {
+      searchResults.className = 'ss-results';
+    }
+  }
+
   // ---- State ----
   const history = []; // { role: 'user'|'assistant', content: string }
   const messagesEl = document.getElementById('chatMessages');
