@@ -211,6 +211,46 @@
     .trade-btn-name { flex: 1; }
     .trade-btn-arrow { color: var(--ink-faint); font-size: 16px; }
 
+    .paper-trade-card {
+      background: var(--paper-raise) linear-gradient(var(--margin-red), var(--margin-red)) no-repeat 15px 0 / 1px 100%;
+      border: 1px solid var(--rule-strong); border-radius: 3px;
+      box-shadow: var(--shadow-paper);
+      padding: 18px 22px 18px 30px; margin-top: 12px;
+    }
+    .pt-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-faint); margin-bottom: 4px; }
+    .pt-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .pt-side-btn {
+      flex: 1; padding: 10px; border: 1px solid var(--rule-strong);
+      border-radius: 2px; font-size: 13px; font-weight: 700;
+      font-family: var(--font-ui); cursor: pointer; background: var(--paper-bright);
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .pt-side-btn.active-buy { background: var(--up); color: #fff; border-color: var(--up); }
+    .pt-side-btn.active-sell { background: var(--down); color: #fff; border-color: var(--down); }
+    .pt-qty {
+      width: 80px; padding: 9px 12px; background: var(--paper-bright);
+      border: 1px solid var(--rule-strong); border-radius: 2px;
+      font-family: var(--font-data); font-size: 14px; color: var(--ink);
+      text-align: center; outline: none;
+    }
+    .pt-qty:focus { border-color: var(--green); }
+    .pt-submit {
+      background: var(--green); color: #F3EEDF; border: none;
+      border-radius: 2px; padding: 10px 20px;
+      font-size: 12px; font-weight: 700; letter-spacing: 0.04em;
+      text-transform: uppercase; font-family: var(--font-ui); cursor: pointer;
+    }
+    .pt-submit:hover { background: var(--green-bright); }
+    .pt-submit:disabled { opacity: 0.5; cursor: default; }
+    .pt-msg { font-size: 12px; min-height: 16px; margin-top: 6px; }
+    .pt-msg.success { color: var(--up); }
+    .pt-msg.error { color: var(--down); }
+    .pt-badge {
+      display: inline-block; padding: 3px 8px; border-radius: 2px;
+      font-family: var(--font-data); font-size: 10px; font-weight: 700;
+      background: #D6E8F0; color: #2E5A6E; margin-bottom: 10px;
+    }
+
     /* ---- Analysis section ---- */
     .analysis-card {
       background: var(--paper-raise) linear-gradient(var(--margin-red), var(--margin-red)) no-repeat 15px 0 / 1px 100%;
@@ -444,6 +484,7 @@
       <div id="tradeSection" style="display:none">
         <div class="section-label">Trade</div>
         <div class="trade-buttons" id="tradeButtons"></div>
+        <div id="paperTradeArea"></div>
       </div>
 
       <div class="section-label">Analysis</div>
@@ -541,6 +582,72 @@
           '</a>';
       }).join('');
       document.getElementById('tradeSection').style.display = '';
+
+      // Check if paper trading is enabled and render the form
+      loadPaperTrade();
+    }
+
+    var ptSide = 'buy';
+
+    async function loadPaperTrade() {
+      try {
+        var res = await AuthGuard.fetch('/api/trading/status');
+        var data = await res.json();
+        if (!data.enabled) return;
+
+        var el = document.getElementById('paperTradeArea');
+        el.innerHTML = '<div class="paper-trade-card">' +
+          '<div class="pt-badge">Paper trading (practice)</div>' +
+          '<div class="pt-row">' +
+            '<button class="pt-side-btn active-buy" id="ptBuy" onclick="setPtSide(\'buy\')">Buy</button>' +
+            '<button class="pt-side-btn" id="ptSell" onclick="setPtSide(\'sell\')">Sell</button>' +
+          '</div>' +
+          '<div class="pt-label">Quantity</div>' +
+          '<div class="pt-row">' +
+            '<input type="number" class="pt-qty" id="ptQty" value="1" min="1" />' +
+            '<span style="font-size:13px;color:var(--ink-muted)">shares of ' + esc(SYMBOL) + '</span>' +
+            '<button class="pt-submit" id="ptSubmit" onclick="placePaperTrade()">Place order</button>' +
+          '</div>' +
+          '<div class="pt-msg" id="ptMsg"></div>' +
+          '</div>';
+      } catch (err) {}
+    }
+
+    function setPtSide(side) {
+      ptSide = side;
+      document.getElementById('ptBuy').className = 'pt-side-btn' + (side === 'buy' ? ' active-buy' : '');
+      document.getElementById('ptSell').className = 'pt-side-btn' + (side === 'sell' ? ' active-sell' : '');
+    }
+
+    async function placePaperTrade() {
+      var qty = parseInt(document.getElementById('ptQty').value);
+      var msg = document.getElementById('ptMsg');
+      var btn = document.getElementById('ptSubmit');
+      if (!qty || qty < 1) { msg.textContent = 'Enter a valid quantity'; msg.className = 'pt-msg error'; return; }
+
+      btn.disabled = true;
+      msg.textContent = 'Placing order...';
+      msg.className = 'pt-msg';
+
+      try {
+        var res = await AuthGuard.fetch('/api/trading/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticker: SYMBOL, qty: qty, side: ptSide, type: 'market' }),
+        });
+        var data = await res.json();
+        if (!res.ok) {
+          msg.textContent = data.error || 'Order failed';
+          msg.className = 'pt-msg error';
+        } else {
+          msg.textContent = (ptSide === 'buy' ? 'Bought' : 'Sold') + ' ' + qty + ' share' + (qty > 1 ? 's' : '') + ' of ' + SYMBOL + '. Status: ' + data.status;
+          msg.className = 'pt-msg success';
+        }
+      } catch (err) {
+        msg.textContent = 'Could not reach the server';
+        msg.className = 'pt-msg error';
+      }
+      btn.disabled = false;
     }
 
     // Is this ticker on the user's watchlist? Drives the add/remove button.
