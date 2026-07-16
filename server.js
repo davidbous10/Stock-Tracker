@@ -1480,6 +1480,27 @@ const CHAT_TOOLS = [
       required: ['ticker', 'condition', 'threshold'],
     },
   },
+  {
+    name: 'place_trade',
+    description: 'Place a paper trade (buy or sell) for a stock. This uses paper trading with fake money for practice. Use when the user says "buy 10 shares of AAPL" or "sell my Tesla" or "trade NVDA." Always confirm the order details before placing.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        ticker: { type: 'string', description: 'Stock ticker symbol' },
+        qty: { type: 'number', description: 'Number of shares' },
+        side: { type: 'string', enum: ['buy', 'sell'], description: 'Buy or sell' },
+      },
+      required: ['ticker', 'qty', 'side'],
+    },
+  },
+  {
+    name: 'get_positions',
+    description: 'Get the user\'s current paper trading portfolio positions showing what they own, cost basis, current value, and profit/loss. Use when they ask about their positions, portfolio, holdings, or "what do I own."',
+    input_schema: {
+      type: 'object',
+      properties: {},
+    },
+  },
 ];
 
 async function executeChatTool(toolName, input, userId) {
@@ -1618,6 +1639,49 @@ async function executeChatTool(toolName, input, userId) {
         return { error: `Could not set alert: ${err.message}` };
       }
     }
+    case 'place_trade': {
+      if (!tradingEnabled()) return { error: 'Paper trading is not configured yet.' };
+      const qty = input.qty;
+      const side = input.side;
+      if (!qty || !side) return { error: 'Missing quantity or side (buy/sell)' };
+      try {
+        const r = await fetch(`${ALPACA_BASE}/v2/orders`, {
+          method: 'POST',
+          headers: alpacaHeaders(),
+          body: JSON.stringify({
+            symbol: ticker,
+            qty: String(qty),
+            side,
+            type: 'market',
+            time_in_force: 'day',
+          }),
+        });
+        const data = await r.json();
+        if (!r.ok) return { error: data.message || 'Order rejected by broker' };
+        logActivity(userId, 'trade', `${side} ${qty} ${ticker}`);
+        return { result: `Order placed: ${side} ${qty} shares of ${ticker}. Order status: ${data.status}. This is paper trading (practice money).` };
+      } catch (err) {
+        return { error: 'Could not reach the trading service' };
+      }
+    }
+    case 'get_positions': {
+      if (!tradingEnabled()) return { error: 'Paper trading is not configured yet.' };
+      try {
+        const [posRes, acctRes] = await Promise.all([
+          fetch(`${ALPACA_BASE}/v2/positions`, { headers: alpacaHeaders() }),
+          fetch(`${ALPACA_BASE}/v2/account`, { headers: alpacaHeaders() }),
+        ]);
+        const positions = await posRes.json();
+        const account = await acctRes.json();
+        if (!posRes.ok) return { error: 'Could not fetch positions' };
+        const posText = Array.isArray(positions) && positions.length > 0
+          ? positions.map(p => `${p.symbol}: ${p.qty} shares, avg entry $${parseFloat(p.avg_entry_price).toFixed(2)}, current $${parseFloat(p.current_price).toFixed(2)}, P/L $${parseFloat(p.unrealized_pl).toFixed(2)} (${(parseFloat(p.unrealized_plpc) * 100).toFixed(2)}%)`).join('\n')
+          : 'No open positions.';
+        return { result: `Account equity: $${parseFloat(account.equity).toFixed(2)}, buying power: $${parseFloat(account.buying_power).toFixed(2)}, cash: $${parseFloat(account.cash).toFixed(2)}\n\nPositions:\n${posText}\n\n(Paper trading account, practice money)` };
+      } catch (err) {
+        return { error: 'Could not reach the trading service' };
+      }
+    }
     default:
       return { error: 'Unknown tool' };
   }
@@ -1678,6 +1742,8 @@ Your tools:
 - get_financials: pull PE, EPS, margins, cash flow, growth rates, etc. Use for valuation questions, "is X overvalued," DCF requests, or fundamental analysis
 - get_chart_data: pull price history to render a visual chart in the chat. Use when they want to see a chart or trend
 - set_alert: create price alerts. Understand natural language like "tell me if AAPL drops below 200"
+- place_trade: place a paper trade (buy or sell shares). This is practice trading with fake money. When the user says "buy 10 shares of NVDA," use this tool. Always state the order details before placing.
+- get_positions: show the user's paper trading portfolio, positions, P/L, and account balance. Use when they ask "what do I own" or "show my positions" or "how's my portfolio doing" (in the trading sense, not watchlist sense)
 
 How to behave:
 - Lead with the answer, not the caveats. If they ask "how's my portfolio," start with the verdict, then the breakdown.
@@ -1848,6 +1914,148 @@ async function sendPushToUser(userId, title, body) {
     }
   } catch (err) {}
 }
+
+// ------------------------------------------------------------
+// TRADING — Alpaca paper trading integration. All requests proxy
+// through our server so the user's browser never sees the Alpaca
+// API keys. Paper trading uses fake money, no risk.
+// ------------------------------------------------------------
+const ALPACA_BASE = 'https://paper-api.alpaca.markets';
+
+function alpacaHeaders() {
+  return {
+    'APCA-API-KEY-ID': process.env.ALPACA_API_KEY || '',
+    'APCA-API-SECRET-KEY': process.env.ALPACA_API_SECRET || '',
+    'Content-Type': 'application/json',
+  };
+}
+
+function tradingEnabled() {
+  return !!(process.env.ALPACA_API_KEY && process.env.ALPACA_API_SECRET);
+}
+
+// Check if trading is configured
+app.get('/api/trading/status', requireAuth, (req, res) => {
+  res.json({ enabled: tradingEnabled() });
+});
+
+// Account info: buying power, equity, cash
+app.get('/api/trading/account', requireAuth, async (req, res) => {
+  if (!tradingEnabled()) return res.status(500).json({ error: 'Trading not configured' });
+  try {
+    const r = await fetch(`${ALPACA_BASE}/v2/account`, { headers: alpacaHeaders() });
+    const data = await r.json();
+    if (!r.ok) return res.status(r.status).json({ error: data.message || 'Alpaca error' });
+    res.json({
+      buyingPower: parseFloat(data.buying_power),
+      cash: parseFloat(data.cash),
+      equity: parseFloat(data.equity),
+      portfolioValue: parseFloat(data.portfolio_value),
+      patternDayTrader: data.pattern_day_trader,
+      tradingBlocked: data.trading_blocked,
+      accountStatus: data.status,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not reach Alpaca' });
+  }
+});
+
+// Current positions
+app.get('/api/trading/positions', requireAuth, async (req, res) => {
+  if (!tradingEnabled()) return res.status(500).json({ error: 'Trading not configured' });
+  try {
+    const r = await fetch(`${ALPACA_BASE}/v2/positions`, { headers: alpacaHeaders() });
+    const data = await r.json();
+    if (!r.ok) return res.status(r.status).json({ error: data.message || 'Alpaca error' });
+    res.json({
+      positions: data.map(p => ({
+        ticker: p.symbol,
+        qty: parseFloat(p.qty),
+        avgEntry: parseFloat(p.avg_entry_price),
+        currentPrice: parseFloat(p.current_price),
+        marketValue: parseFloat(p.market_value),
+        unrealizedPL: parseFloat(p.unrealized_pl),
+        unrealizedPLPct: parseFloat(p.unrealized_plpc) * 100,
+        side: p.side,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not reach Alpaca' });
+  }
+});
+
+// Place an order
+app.post('/api/trading/orders', requireAuth, async (req, res) => {
+  if (!tradingEnabled()) return res.status(500).json({ error: 'Trading not configured' });
+  const { ticker, qty, side, type, limitPrice } = req.body;
+  if (!ticker || !qty || !side) {
+    return res.status(400).json({ error: 'Missing ticker, qty, or side' });
+  }
+  if (!['buy', 'sell'].includes(side)) {
+    return res.status(400).json({ error: 'Side must be buy or sell' });
+  }
+
+  const order = {
+    symbol: ticker.toUpperCase(),
+    qty: String(qty),
+    side,
+    type: type || 'market',
+    time_in_force: 'day',
+  };
+  if (type === 'limit' && limitPrice) {
+    order.limit_price = String(limitPrice);
+  }
+
+  try {
+    const r = await fetch(`${ALPACA_BASE}/v2/orders`, {
+      method: 'POST',
+      headers: alpacaHeaders(),
+      body: JSON.stringify(order),
+    });
+    const data = await r.json();
+    if (!r.ok) return res.status(r.status).json({ error: data.message || 'Order rejected' });
+
+    logActivity(req.session.userId, 'trade', `${side} ${qty} ${ticker.toUpperCase()}`);
+
+    res.json({
+      orderId: data.id,
+      ticker: data.symbol,
+      side: data.side,
+      qty: data.qty,
+      type: data.type,
+      status: data.status,
+      filledAt: data.filled_at,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not reach Alpaca' });
+  }
+});
+
+// Recent orders
+app.get('/api/trading/orders', requireAuth, async (req, res) => {
+  if (!tradingEnabled()) return res.status(500).json({ error: 'Trading not configured' });
+  try {
+    const r = await fetch(`${ALPACA_BASE}/v2/orders?status=all&limit=20&direction=desc`, { headers: alpacaHeaders() });
+    const data = await r.json();
+    if (!r.ok) return res.status(r.status).json({ error: data.message || 'Alpaca error' });
+    res.json({
+      orders: data.map(o => ({
+        id: o.id,
+        ticker: o.symbol,
+        side: o.side,
+        qty: o.qty,
+        type: o.type,
+        status: o.status,
+        filledQty: o.filled_qty,
+        filledAvgPrice: o.filled_avg_price ? parseFloat(o.filled_avg_price) : null,
+        submittedAt: o.submitted_at,
+        filledAt: o.filled_at,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not reach Alpaca' });
+  }
+});
 
 app.get('/api/health', async (req, res) => {
   let hasDatabase = false;
