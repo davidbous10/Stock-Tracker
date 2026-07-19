@@ -1955,6 +1955,14 @@ app.get('/api/trading/status', requireAuth, (req, res) => {
   res.json({ enabled: tradingEnabled() });
 });
 
+// Referral URLs (read from environment variables)
+app.get('/api/referral-urls', requireAuth, (req, res) => {
+  res.json({
+    robinhood: process.env.ROBINHOOD_REFERRAL_URL || null,
+    webull: process.env.WEBULL_REFERRAL_URL || null,
+  });
+});
+
 // Account info: buying power, equity, cash
 app.get('/api/trading/account', requireAuth, async (req, res) => {
   if (!tradingEnabled()) return res.status(500).json({ error: 'Trading not configured' });
