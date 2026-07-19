@@ -256,6 +256,22 @@ async function initDb(retries = 10, delayMs = 3000) {
         ON activity_log (user_id, created_at DESC)
       `);
 
+      // Notifications for fired alerts and system events
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS notifications (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id),
+          type TEXT NOT NULL,
+          title TEXT NOT NULL,
+          body TEXT,
+          read BOOLEAN DEFAULT false,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+
+      // Watchlist categories
+      await pool.query(`ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS category TEXT DEFAULT NULL`);
+
       console.log('Database connected and ready.');
       dbReady = true;
       return;
@@ -272,7 +288,7 @@ async function initDb(retries = 10, delayMs = 3000) {
 
 async function getAllWatchlistItems(userId) {
   const { rows } = await pool.query(
-    'SELECT ticker, name, logo, sort_order FROM watchlist WHERE user_id = $1 ORDER BY ticker ASC',
+    'SELECT ticker, name, logo, sort_order, category FROM watchlist WHERE user_id = $1 ORDER BY ticker ASC',
     [userId]
   );
   return rows;
@@ -971,6 +987,7 @@ async function checkAlertsForTicker(ticker, quote) {
     if (isOneTime) {
       await sendAlertEmail(alert, quote);
       await sendPushToUser(alert.user_id, `${alert.ticker} Alert`, `${alert.ticker} is at $${quote.price.toFixed(2)} (${alertDescription(alert)})`);
+      pool.query('INSERT INTO notifications (user_id, type, title, body) VALUES ($1, $2, $3, $4)', [alert.user_id, 'alert', `${alert.ticker} Alert`, `${alert.ticker} is at $${quote.price.toFixed(2)} (${alertDescription(alert)})`]).catch(() => {});
       await pool.query('UPDATE alerts SET active = false, last_triggered_at = NOW() WHERE id = $1', [alert.id]);
     } else {
       const cooledDown = !alert.last_triggered_at ||
@@ -978,6 +995,7 @@ async function checkAlertsForTicker(ticker, quote) {
       if (cooledDown) {
         await sendAlertEmail(alert, quote);
         await sendPushToUser(alert.user_id, `${alert.ticker} Alert`, `${alert.ticker} is at $${quote.price.toFixed(2)} (${alertDescription(alert)})`);
+        pool.query('INSERT INTO notifications (user_id, type, title, body) VALUES ($1, $2, $3, $4)', [alert.user_id, 'alert', `${alert.ticker} Alert`, `${alert.ticker} is at $${quote.price.toFixed(2)} (${alertDescription(alert)})`]).catch(() => {});
         await pool.query('UPDATE alerts SET last_triggered_at = NOW() WHERE id = $1', [alert.id]);
       }
     }
@@ -2002,6 +2020,64 @@ app.get('/api/referral-urls', requireAuth, (req, res) => {
     robinhood: process.env.ROBINHOOD_REFERRAL_URL || null,
     webull: process.env.WEBULL_REFERRAL_URL || null,
   });
+});
+
+// Notifications
+app.get('/api/notifications', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, type, title, body, read, created_at FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30',
+      [req.session.userId]
+    );
+    const { rows: unreadCount } = await pool.query(
+      'SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND read = false',
+      [req.session.userId]
+    );
+    res.json({ notifications: rows, unread: parseInt(unreadCount[0].count, 10) });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+app.post('/api/notifications/read', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  try {
+    await pool.query('UPDATE notifications SET read = true WHERE user_id = $1 AND read = false', [req.session.userId]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Watchlist category update
+app.post('/api/watchlist/:ticker/category', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  const ticker = req.params.ticker.toUpperCase();
+  const category = (req.body.category || '').trim() || null;
+  try {
+    await pool.query(
+      'UPDATE watchlist SET category = $1 WHERE ticker = $2 AND user_id = $3',
+      [category, ticker, req.session.userId]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Get watchlist categories
+app.get('/api/watchlist/categories', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  try {
+    const { rows } = await pool.query(
+      'SELECT DISTINCT category FROM watchlist WHERE user_id = $1 AND category IS NOT NULL ORDER BY category',
+      [req.session.userId]
+    );
+    res.json({ categories: rows.map(r => r.category) });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Account info: buying power, equity, cash
