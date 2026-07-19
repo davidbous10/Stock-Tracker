@@ -749,16 +749,23 @@
           <div class="sector-table-header"><div></div><div>Sector</div><div style="text-align:right">Price</div><div>Performance</div><div style="text-align:right">Day %</div></div>
         </div>
       </div>
+
+      <div class="section-label">International markets</div>
+      <div id="intlList">
+        <div class="sector-table">
+          <div class="sector-table-header"><div></div><div>Market</div><div style="text-align:right">Price</div><div>Performance</div><div style="text-align:right">Day %</div></div>
+        </div>
+      </div>
     </div>
   </div>
 
   <script src="/auth.js"></script>
   <script src="/chat.js"></script>
   <script>
-    AuthGuard.init(function () { loadSectors(); });
+    AuthGuard.init(function () { loadSectors(); loadIntl(); });
     function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
     function fmtPct(v) { var abs = Math.abs(v).toFixed(2); if (v < 0) return '(' + abs + '%)'; if (v > 0) return '+' + abs + '%'; return abs + '%'; }
-    document.getElementById('refreshBtn').addEventListener('click', loadSectors);
+    document.getElementById('refreshBtn').addEventListener('click', function() { loadSectors(); loadIntl(); });
     async function loadSectors() {
       var el = document.getElementById('sectorList');
       try {
@@ -788,7 +795,37 @@
         el.innerHTML = html;
       } catch (err) { el.innerHTML = '<div class="sector-error">Could not reach the server</div>'; }
     }
-    setInterval(loadSectors, 30000);
+    setInterval(function() { loadSectors(); loadIntl(); }, 30000);
+
+    async function loadIntl() {
+      var el = document.getElementById('intlList');
+      try {
+        var res = await AuthGuard.fetch('/api/markets/international');
+        var data = await res.json();
+        if (!res.ok) { el.innerHTML = '<div class="sector-error">' + esc(data.error) + '</div>'; return; }
+        var markets = (data.markets || []).filter(function(s) { return !s.error && s.changePercent != null; });
+        markets.sort(function(a, b) { return (b.changePercent || 0) - (a.changePercent || 0); });
+        if (markets.length === 0) { el.innerHTML = '<div class="sector-error">No international data available</div>'; return; }
+        var maxAbs = 0.01;
+        for (var k = 0; k < markets.length; k++) { var av = Math.abs(markets[k].changePercent || 0); if (av > maxAbs) maxAbs = av; }
+        var html = '<div class="sector-table">';
+        html += '<div class="sector-table-header"><div></div><div>Market</div><div style="text-align:right">Price</div><div>Performance</div><div style="text-align:right">Day %</div></div>';
+        for (var i = 0; i < markets.length; i++) {
+          var s = markets[i];
+          var dir = s.changePercent > 0 ? 'up' : s.changePercent < 0 ? 'down' : 'flat';
+          var barWidth = (Math.abs(s.changePercent) / maxAbs) * 50;
+          html += '<a href="/stock.html?t=' + encodeURIComponent(s.ticker) + '" class="sector-row">';
+          html += '<div class="sr-rank">' + (i + 1) + '</div>';
+          html += '<div class="sr-info"><div class="sr-name">' + esc(s.name) + '</div><div class="sr-ticker">' + esc(s.ticker) + '</div></div>';
+          html += '<div class="sr-price">$' + (s.price ? s.price.toFixed(2) : '-') + '</div>';
+          html += '<div class="sr-bar-cell"><div class="sr-bar-track"><div class="sr-bar-center"></div><div class="sr-bar-fill ' + dir + '" style="width:' + barWidth + '%"></div></div></div>';
+          html += '<div class="sr-pct ' + dir + '">' + fmtPct(s.changePercent) + '</div>';
+          html += '</a>';
+        }
+        html += '</div>';
+        el.innerHTML = html;
+      } catch (err) { el.innerHTML = '<div class="sector-error">Could not reach the server</div>'; }
+    }
   </script>
 
   <div class="bottom-tabs">
