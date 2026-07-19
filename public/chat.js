@@ -248,6 +248,77 @@
   `;
   document.head.appendChild(searchStyle);
 
+  // ---- Dark mode ----
+  var darkStyle = document.createElement('style');
+  darkStyle.textContent = `
+    html.dark { background: #0F1A14 !important; }
+    html.dark body { background: #0F1A14; color: #D4DBCE; }
+    html.dark :root {
+      --paper: #0F1A14;
+      --paper-raise: #162219;
+      --paper-bright: #1B2B20;
+      --paper-sunken: #0B140F;
+      --ink: #D4DBCE;
+      --ink-muted: #8A9483;
+      --ink-faint: #5E6B56;
+      --rule: #2A3B2E;
+      --rule-strong: #354A3A;
+      --margin-red: #7A3B35;
+      --green: #1B5E3A;
+      --green-deep: #0F3D25;
+      --green-bright: #24784A;
+      --brass: #C9A75C;
+      --brass-soft: #A68B42;
+      --up: #3DDC97;
+      --up-bg: #122B1F;
+      --down: #FF6B6B;
+      --down-bg: #2B1518;
+      --shadow-paper: 0 1px 0 rgba(0,0,0,0.2), 0 8px 22px rgba(0,0,0,0.3);
+    }
+    html.dark .sidebar { background: #0B140F; border-color: #1B2B20; }
+    html.dark .side-nav-link:hover { background: rgba(255,255,255,0.06); }
+    html.dark .side-nav-link.active { background: rgba(27,94,58,0.4); }
+    html.dark .account-avatar { border-color: rgba(255,255,255,0.2); }
+    html.dark .btn-logout-full { border-color: rgba(255,255,255,0.15); color: #8A9483; }
+    html.dark .auth-card { background: #162219; border-color: #354A3A; }
+    html.dark .auth-card::before { border-color: rgba(201,167,92,0.3); }
+    html.dark .auth-tab { color: #8A9483; }
+    html.dark .auth-tab.active { background: #1B5E3A; color: #D4DBCE; }
+    html.dark .auth-tabs { background: #0B140F; border-color: #2A3B2E; }
+    html.dark #authForm input { background: #0F1A14; border-color: #354A3A; color: #D4DBCE; }
+    html.dark .btn-auth-submit { background: #1B5E3A; }
+    html.dark .skeleton { background: linear-gradient(90deg, #1B2B20 25%, #2A3B2E 37%, #1B2B20 63%); background-size: 400% 100%; }
+    html.dark .chat-panel { background: #162219; border-color: #354A3A; }
+    html.dark .chat-msg.assistant { background: #1B2B20; border-color: #2A3B2E; color: #D4DBCE; }
+    html.dark .chat-input-row { background: #0F1A14; border-color: #2A3B2E; }
+    html.dark .chat-input { background: #162219; border-color: #354A3A; color: #D4DBCE; }
+    html.dark .chat-suggestion { border-color: #354A3A; color: #8A9483; }
+    html.dark .chat-welcome { color: #8A9483; }
+    html.dark .chat-welcome strong { color: #D4DBCE; }
+    html.dark .ss-input-wrap { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); }
+    html.dark .ss-results { background: #162219; border-color: #354A3A; }
+    html.dark .ss-result { color: #D4DBCE; border-color: #2A3B2E; }
+    html.dark .ss-result:hover { background: #1B2B20; }
+    html.dark .landing { color: #D4DBCE; }
+    html.dark .landing-feature { background: #162219; border-color: #354A3A; }
+    html.dark .landing-sub { color: #8A9483; }
+    html.dark .bottom-tabs { background: #0B140F; border-color: #1B2B20; }
+    html.dark img.stock-logo, html.dark .avatar { filter: none; background: #1B2B20; }
+  `;
+  document.head.appendChild(darkStyle);
+
+  // Apply saved dark mode preference
+  if (localStorage.getItem('tt_dark') === '1') {
+    document.documentElement.classList.add('dark');
+  }
+
+  // Global toggle function (called from settings page)
+  window.toggleDarkMode = function () {
+    var isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('tt_dark', isDark ? '1' : '0');
+    return isDark;
+  };
+
   // Search logic
   var searchInput = document.getElementById('globalSearch');
   var searchResults = document.getElementById('globalResults');
