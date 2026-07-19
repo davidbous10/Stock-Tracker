@@ -1343,6 +1343,47 @@ const SECTOR_ETFS = [
   { ticker: 'XLC', name: 'Communication' },
 ];
 
+// International market ETFs for global market overview
+const INTL_ETFS = [
+  { ticker: 'EWJ', name: 'Japan (Nikkei)' },
+  { ticker: 'EWG', name: 'Germany (DAX)' },
+  { ticker: 'EWU', name: 'United Kingdom (FTSE)' },
+  { ticker: 'FXI', name: 'China (Large Cap)' },
+  { ticker: 'EWY', name: 'South Korea (KOSPI)' },
+  { ticker: 'EWA', name: 'Australia (ASX)' },
+  { ticker: 'EWC', name: 'Canada (TSX)' },
+  { ticker: 'EWZ', name: 'Brazil (Bovespa)' },
+  { ticker: 'INDA', name: 'India (Nifty)' },
+  { ticker: 'EWT', name: 'Taiwan (TWSE)' },
+];
+
+app.get('/api/markets/international', requireAuth, async (req, res) => {
+  if (!process.env.FINNHUB_API_KEY) {
+    return res.status(500).json({ error: 'Server is missing FINNHUB_API_KEY' });
+  }
+
+  const cached = newsCacheGet('intl-markets');
+  if (cached) return res.json({ markets: cached });
+
+  try {
+    const results = [];
+    for (const etf of INTL_ETFS) {
+      const quote = await fetchQuote(etf.ticker);
+      results.push({
+        ticker: etf.ticker,
+        name: etf.name,
+        price: quote.price,
+        changePercent: quote.changePercent,
+        error: quote.error || null,
+      });
+    }
+    newsCacheSet('intl-markets', results);
+    res.json({ markets: results });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load international data' });
+  }
+});
+
 app.get('/api/sectors', requireAuth, async (req, res) => {
   if (!process.env.FINNHUB_API_KEY) {
     return res.status(500).json({ error: 'Server is missing FINNHUB_API_KEY' });
