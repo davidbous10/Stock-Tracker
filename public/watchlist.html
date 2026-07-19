@@ -542,6 +542,32 @@
     }
     .btn-onboard:hover { background: var(--green-bright); }
 
+    .cat-filters {
+      display: flex; gap: 6px; flex-wrap: wrap;
+      margin-bottom: 14px; padding: 0 2px;
+    }
+    .cat-btn {
+      background: var(--paper-bright); border: 1px solid var(--rule-strong);
+      border-radius: 2px; padding: 5px 12px; font-size: 11px;
+      font-weight: 600; font-family: var(--font-ui); color: var(--ink-muted);
+      cursor: pointer; text-transform: capitalize;
+    }
+    .cat-btn:hover { border-color: var(--green); color: var(--ink); }
+    .cat-btn.active { background: var(--green); color: #F3EEDF; border-color: var(--green); }
+
+    .cat-tag {
+      display: inline-block; padding: 1px 8px; border-radius: 2px;
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--brass); background: rgba(169,127,47,0.1);
+      border: 1px solid rgba(169,127,47,0.25); margin-left: 6px; cursor: pointer;
+    }
+    .cat-tag:hover { background: rgba(169,127,47,0.2); }
+    .cat-select {
+      background: var(--paper-bright); border: 1px solid var(--rule-strong);
+      border-radius: 2px; padding: 3px 6px; font-size: 10px;
+      font-family: var(--font-ui); color: var(--ink); margin-left: 6px;
+    }
+
     .card {
       display: flex;
       background: var(--paper-raise) linear-gradient(var(--margin-red), var(--margin-red)) no-repeat 15px 0 / 1px 100%;
@@ -943,6 +969,10 @@
       </div>
     </div>
 
+    <div class="cat-filters" id="catFilters" style="display:none">
+      <button class="cat-btn active" data-cat="" onclick="filterCategory('')">All</button>
+    </div>
+
     <div class="add-wrap">
       <div class="add-row">
         <span class="search-icon">
@@ -1170,7 +1200,8 @@
 
     function cardHtml(item) {
       const q = quotesByTicker[item.ticker];
-      const nameHtml = item.name ? `<div class="company-name">${esc(item.name)}</div>` : '';
+      const catTag = item.category ? `<span class="cat-tag" onclick="event.stopPropagation();promptCategory('${esc(item.ticker)}','${esc(item.category)}')">${esc(item.category)}</span>` : `<span class="cat-tag" onclick="event.stopPropagation();promptCategory('${esc(item.ticker)}','')" style="opacity:0.4">+ tag</span>`;
+      const nameHtml = item.name ? `<div class="company-name">${esc(item.name)}${catTag}</div>` : `<div class="company-name">${catTag}</div>`;
       const dirClass = q && !q.error ? (q.changePercent > 0 ? 'dir-up' : q.changePercent < 0 ? 'dir-down' : '') : '';
 
       if (!q) {
@@ -1709,6 +1740,58 @@
       setInterval(loadPrices, 30000);
       setInterval(loadHistory, 120000);
       setInterval(loadAlerts, 120000);
+
+      // Load categories for filter bar
+      loadCategories();
+    }
+
+    var activeCategory = '';
+
+    async function loadCategories() {
+      try {
+        var res = await AuthGuard.fetch('/api/watchlist/categories');
+        var data = await res.json();
+        var cats = data.categories || [];
+        var filtersEl = document.getElementById('catFilters');
+        if (cats.length === 0) { filtersEl.style.display = 'none'; return; }
+        filtersEl.style.display = 'flex';
+        filtersEl.innerHTML = '<button class="cat-btn active" data-cat="" onclick="filterCategory(\'\')">All</button>' +
+          cats.map(function(c) { return '<button class="cat-btn" data-cat="' + c + '" onclick="filterCategory(\'' + c + '\')">' + c + '</button>'; }).join('');
+      } catch (err) {}
+    }
+
+    function filterCategory(cat) {
+      activeCategory = cat;
+      document.querySelectorAll('.cat-btn').forEach(function(b) {
+        b.classList.toggle('active', b.dataset.cat === cat);
+      });
+      // Filter visible cards
+      document.querySelectorAll('.card').forEach(function(card) {
+        var ticker = card.dataset.ticker;
+        var item = items.find(function(i) { return i.ticker === ticker; });
+        if (!cat || (item && item.category === cat)) {
+          card.style.display = '';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+
+    async function promptCategory(ticker, current) {
+      var cat = prompt('Enter a category tag for ' + ticker + ' (e.g. Tech, Long term, Watching).\nLeave empty to remove.', current || '');
+      if (cat === null) return;
+      try {
+        await AuthGuard.fetch('/api/watchlist/' + encodeURIComponent(ticker) + '/category', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category: cat.trim() }),
+        });
+        // Update local data and re-render
+        var item = items.find(function(i) { return i.ticker === ticker; });
+        if (item) item.category = cat.trim() || null;
+        render();
+        loadCategories();
+      } catch (err) {}
     }
   </script>
 
