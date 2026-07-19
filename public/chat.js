@@ -200,6 +200,100 @@
   document.body.appendChild(panel);
   document.body.appendChild(fab);
 
+  // ---- Notification bell: inject into sidebar ----
+  var sideNav = document.querySelector('.sidebar .side-nav');
+  if (sideNav) {
+    var bellWrap = document.createElement('div');
+    bellWrap.className = 'notif-bell-wrap';
+    bellWrap.innerHTML = '<button class="notif-bell" id="notifBell" onclick="toggleNotifPanel()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="notif-badge" id="notifBadge" style="display:none">0</span></button><div class="notif-dropdown" id="notifDropdown"></div>';
+    var acctBlock = document.querySelector('.sidebar .account-block');
+    if (acctBlock) acctBlock.parentNode.insertBefore(bellWrap, acctBlock);
+  }
+
+  // Notification CSS
+  var notifStyle = document.createElement('style');
+  notifStyle.textContent = `
+    .notif-bell-wrap { position: relative; padding: 0 12px; }
+    .notif-bell {
+      background: none; border: none; color: #B9C1AC; cursor: pointer;
+      padding: 8px 0; display: flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 600; font-family: 'Archivo', system-ui, sans-serif;
+    }
+    .notif-bell:hover { color: #F3EEDF; }
+    .notif-badge {
+      background: #FF6B6B; color: #fff; font-size: 10px; font-weight: 700;
+      min-width: 16px; height: 16px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Courier Prime', monospace; padding: 0 4px;
+    }
+    .notif-dropdown {
+      display: none; position: absolute; bottom: calc(100% + 8px); left: 12px;
+      width: 280px; max-height: 320px; overflow-y: auto;
+      background: #FBF7EB; border: 1px solid #C6BEA2; border-radius: 3px;
+      box-shadow: 0 8px 24px rgba(35,40,31,0.2); z-index: 50;
+    }
+    .notif-dropdown.open { display: block; }
+    html.dark .notif-dropdown { background: #162219; border-color: #354A3A; }
+    .notif-item {
+      padding: 10px 14px; border-bottom: 1px solid #DDD5BE;
+      font-size: 12px; color: #23281F;
+    }
+    html.dark .notif-item { border-color: #2A3B2E; color: #D4DBCE; }
+    .notif-item:last-child { border-bottom: none; }
+    .notif-item-title { font-weight: 700; margin-bottom: 2px; }
+    .notif-item-body { color: #686C5B; font-size: 11px; }
+    html.dark .notif-item-body { color: #8A9483; }
+    .notif-item-time { color: #9A9C8B; font-size: 10px; font-family: 'Courier Prime', monospace; margin-top: 3px; }
+    .notif-item.unread { border-left: 3px solid #C9A75C; }
+    .notif-empty { padding: 20px; text-align: center; color: #9A9C8B; font-size: 12px; }
+    @media (max-width: 800px) { .notif-bell-wrap { display: none; } }
+  `;
+  document.head.appendChild(notifStyle);
+
+  var notifOpen = false;
+  window.toggleNotifPanel = function () {
+    var dd = document.getElementById('notifDropdown');
+    notifOpen = !notifOpen;
+    dd.className = 'notif-dropdown' + (notifOpen ? ' open' : '');
+    if (notifOpen) {
+      loadNotifications();
+      AuthGuard.fetch('/api/notifications/read', { method: 'POST' }).catch(function(){});
+      var badge = document.getElementById('notifBadge');
+      badge.style.display = 'none';
+    }
+  };
+
+  async function loadNotifications() {
+    var dd = document.getElementById('notifDropdown');
+    try {
+      var res = await AuthGuard.fetch('/api/notifications');
+      var data = await res.json();
+      var notifs = data.notifications || [];
+      if (notifs.length === 0) {
+        dd.innerHTML = '<div class="notif-empty">No notifications yet</div>';
+        return;
+      }
+      dd.innerHTML = notifs.map(function(n) {
+        var time = new Date(n.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+        return '<div class="notif-item' + (n.read ? '' : ' unread') + '"><div class="notif-item-title">' + n.title + '</div>' + (n.body ? '<div class="notif-item-body">' + n.body + '</div>' : '') + '<div class="notif-item-time">' + time + '</div></div>';
+      }).join('');
+    } catch (err) { dd.innerHTML = '<div class="notif-empty">Could not load</div>'; }
+  }
+
+  // Check for unread notifications on load
+  async function checkUnread() {
+    try {
+      var res = await AuthGuard.fetch('/api/notifications');
+      var data = await res.json();
+      var badge = document.getElementById('notifBadge');
+      if (badge && data.unread > 0) {
+        badge.textContent = data.unread;
+        badge.style.display = 'flex';
+      }
+    } catch (err) {}
+  }
+  setTimeout(checkUnread, 2000);
+
   // ---- Global search: inject into sidebar ----
   var sidebar = document.querySelector('.sidebar .side-nav');
   if (sidebar) {
