@@ -272,7 +272,7 @@ async function initDb(retries = 10, delayMs = 3000) {
 
 async function getAllWatchlistItems(userId) {
   const { rows } = await pool.query(
-    'SELECT ticker, name, logo, sort_order FROM watchlist WHERE user_id = $1 ORDER BY sort_order ASC',
+    'SELECT ticker, name, logo, sort_order FROM watchlist WHERE user_id = $1 ORDER BY ticker ASC',
     [userId]
   );
   return rows;
