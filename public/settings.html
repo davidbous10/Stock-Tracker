@@ -589,6 +589,15 @@
       </div>
 
       <div class="settings-section">
+        <h2>Appearance</h2>
+        <div class="section-desc">Customize how Trade Track looks</div>
+        <div class="settings-row">
+          <span class="label">Dark mode</span>
+          <button class="btn-settings-submit" id="darkToggle" onclick="handleDarkToggle()" style="min-width:100px">Enable</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
         <h2>Notifications</h2>
         <div class="section-desc">Get browser push notifications when your price alerts fire, even when you're not on Trade Track.</div>
         <div id="pushStatus" style="margin-bottom:10px;font-size:13px;color:var(--ink-muted)">Checking...</div>
@@ -868,7 +877,28 @@
       toggleEl.disabled = false;
     }
 
-    // Check on page load
+    // Dark mode toggle
+    function updateDarkButton() {
+      var btn = document.getElementById('darkToggle');
+      var isDark = document.documentElement.classList.contains('dark');
+      btn.textContent = isDark ? 'Disable' : 'Enable';
+      if (isDark) {
+        btn.style.background = 'transparent';
+        btn.style.color = 'var(--ink-muted)';
+        btn.style.border = '1px solid var(--rule-strong)';
+      } else {
+        btn.style.background = '';
+        btn.style.color = '';
+        btn.style.border = '';
+      }
+    }
+    window.handleDarkToggle = function () {
+      toggleDarkMode();
+      updateDarkButton();
+    };
+    updateDarkButton();
+
+    // Push notification management
     checkPushStatus();
   </script>
 
