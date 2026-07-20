@@ -463,12 +463,40 @@
   let isSending = false;
 
   // ---- Toggle ----
+  var historyLoaded = false;
+
   fab.addEventListener('click', () => {
     isOpen = !isOpen;
     panel.classList.toggle('open', isOpen);
     fab.classList.toggle('open', isOpen);
-    if (isOpen) inputEl.focus();
+    if (isOpen) {
+      inputEl.focus();
+      if (!historyLoaded) {
+        historyLoaded = true;
+        loadChatHistory();
+      }
+    }
   });
+
+  async function loadChatHistory() {
+    try {
+      var res = await AuthGuard.fetch('/api/chat/history');
+      var data = await res.json();
+      var msgs = data.messages || [];
+      if (msgs.length > 0) {
+        // Remove welcome message and suggestions
+        var welcome = messagesEl.querySelector('.chat-welcome');
+        var suggestions = messagesEl.querySelector('.chat-suggestions');
+        if (welcome) welcome.remove();
+        if (suggestions) suggestions.remove();
+
+        msgs.forEach(function(m) {
+          addMessage(m.role, m.content);
+          history.push({ role: m.role, content: m.content });
+        });
+      }
+    } catch (err) {}
+  }
 
   // ---- Suggestions ----
   document.getElementById('chatSuggestions').addEventListener('click', (e) => {
