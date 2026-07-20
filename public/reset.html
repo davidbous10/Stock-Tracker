@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en" style="background:#F3EEDF">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reset Password | Trade Track</title>
+  <meta name="theme-color" content="#17442F" />
+  <link rel="icon" href="/logo.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Archivo:wght@400;500;600;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh; background: #F3EEDF; color: #23281F;
+      font-family: 'Archivo', system-ui, sans-serif;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .reset-card {
+      width: 100%; max-width: 380px;
+      background: #FBF7EB; border: 1px solid #C6BEA2; border-radius: 3px;
+      padding: 38px 34px; box-shadow: 0 1px 0 rgba(35,40,31,0.05), 0 8px 22px rgba(35,40,31,0.08);
+      position: relative;
+    }
+    .reset-card::before {
+      content: ''; position: absolute; inset: 8px;
+      border: 1px solid #C9A75C; border-radius: 2px; pointer-events: none; opacity: 0.75;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+    .brand-title { font-family: 'Marcellus', Georgia, serif; font-size: 22px; }
+    .brand-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: #A97F2F; margin-bottom: 4px; }
+    h2 { font-family: 'Marcellus', Georgia, serif; font-size: 20px; margin-bottom: 16px; }
+    .desc { font-size: 13px; color: #686C5B; margin-bottom: 16px; line-height: 1.5; }
+    input {
+      width: 100%; background: #FFFDF4; border: 1px solid #C6BEA2; border-radius: 2px;
+      padding: 11px 14px; color: #23281F; font-size: 14px;
+      font-family: 'Archivo', system-ui, sans-serif; outline: none; margin-bottom: 10px;
+    }
+    input:focus { border-color: #17442F; }
+    .btn {
+      width: 100%; background: #17442F; color: #F3EEDF; border: none; border-radius: 2px;
+      padding: 12px 0; font-size: 13px; font-weight: 700; letter-spacing: 0.06em;
+      text-transform: uppercase; font-family: 'Archivo', system-ui, sans-serif;
+      cursor: pointer; margin-top: 6px;
+    }
+    .btn:hover { background: #1E5C3D; }
+    .btn:disabled { opacity: 0.6; cursor: default; }
+    .msg { font-size: 13px; min-height: 16px; margin-bottom: 8px; }
+    .msg.error { color: #8C2F2B; }
+    .msg.success { color: #1D6A43; }
+    .back { display: block; text-align: center; margin-top: 16px; font-size: 12px; color: #686C5B; text-decoration: none; }
+    .back:hover { color: #23281F; }
+  </style>
+</head>
+<body>
+  <div class="reset-card">
+    <div class="brand">
+      <img src="/logo.svg" alt="" width="36" height="36" style="border-radius:4px" />
+      <div>
+        <div class="brand-eyebrow">Private ledger</div>
+        <div class="brand-title">Trade Track</div>
+      </div>
+    </div>
+
+    <div id="requestForm">
+      <h2>Reset your password</h2>
+      <div class="desc">Enter your email and we'll send you a link to reset your password.</div>
+      <input type="email" id="resetEmail" placeholder="Email" required />
+      <div class="msg" id="requestMsg"></div>
+      <button class="btn" onclick="requestReset()">Send reset link</button>
+    </div>
+
+    <div id="resetForm" style="display:none">
+      <h2>Set new password</h2>
+      <div class="desc">Enter your new password below.</div>
+      <input type="password" id="newPassword" placeholder="New password (8+ characters)" required />
+      <input type="password" id="confirmPassword" placeholder="Confirm password" required />
+      <div class="msg" id="resetMsg"></div>
+      <button class="btn" onclick="doReset()">Reset password</button>
+    </div>
+
+    <a href="/" class="back">Back to login</a>
+  </div>
+
+  <script>
+    // Check if we have a token in the URL (came from email link)
+    var token = new URLSearchParams(window.location.search).get('token');
+    if (token) {
+      document.getElementById('requestForm').style.display = 'none';
+      document.getElementById('resetForm').style.display = '';
+    }
+
+    async function requestReset() {
+      var email = document.getElementById('resetEmail').value.trim();
+      var msg = document.getElementById('requestMsg');
+      if (!email) { msg.textContent = 'Enter your email'; msg.className = 'msg error'; return; }
+
+      try {
+        var res = await fetch('/api/auth/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email }),
+        });
+        var data = await res.json();
+        msg.textContent = 'If an account exists with that email, a reset link has been sent. Check your inbox.';
+        msg.className = 'msg success';
+      } catch (err) {
+        msg.textContent = 'Could not reach the server';
+        msg.className = 'msg error';
+      }
+    }
+
+    async function doReset() {
+      var pw = document.getElementById('newPassword').value;
+      var confirm = document.getElementById('confirmPassword').value;
+      var msg = document.getElementById('resetMsg');
+
+      if (pw.length < 8) { msg.textContent = 'Password must be at least 8 characters'; msg.className = 'msg error'; return; }
+      if (pw !== confirm) { msg.textContent = 'Passwords do not match'; msg.className = 'msg error'; return; }
+
+      try {
+        var res = await fetch('/api/auth/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: token, password: pw }),
+        });
+        var data = await res.json();
+        if (res.ok) {
+          msg.textContent = 'Password reset! Redirecting to login...';
+          msg.className = 'msg success';
+          setTimeout(function() { window.location.href = '/'; }, 2000);
+        } else {
+          msg.textContent = data.error || 'Something went wrong';
+          msg.className = 'msg error';
+        }
+      } catch (err) {
+        msg.textContent = 'Could not reach the server';
+        msg.className = 'msg error';
+      }
+    }
+  </script>
+</body>
+</html>
