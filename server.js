@@ -302,9 +302,10 @@ async function fetchCompanyProfile(ticker) {
     return {
       name: data && data.name ? data.name : null,
       logo: data && data.logo ? data.logo : null,
+      industry: data && data.finnhubIndustry ? data.finnhubIndustry : null,
     };
   } catch (err) {
-    return { name: null, logo: null };
+    return { name: null, logo: null, industry: null };
   }
 }
 
