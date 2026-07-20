@@ -1523,7 +1523,40 @@ const CHAT_TOOLS = [
   },
   {
     name: 'get_financials',
-    description: 'Get detailed financial metrics for a company: PE ratio, EPS, revenue, profit margins, cash per share, debt/equity, dividend yield, beta, 52-week range, and more. Use when the user asks about fundamentals, valuation, financials, DCF, or whether a stock is overvalued/undervalued. The AI should use these numbers to provide analysis.',
+    description: 'Get key financial metrics for a company: PE ratio, EPS, revenue, profit margins, cash per share, debt/equity, dividend yield, beta, 52-week range, and more. Use for quick valuation questions or "is X overvalued."',
+    input_schema: {
+      type: 'object',
+      properties: {
+        ticker: { type: 'string', description: 'Stock ticker symbol' },
+      },
+      required: ['ticker'],
+    },
+  },
+  {
+    name: 'get_financial_statements',
+    description: 'Get actual income statement, balance sheet, and cash flow data from SEC filings (10-K and 10-Q). Returns revenue, cost of revenue, gross profit, operating income, net income, total assets, total liabilities, total equity, operating cash flow, capital expenditures, and free cash flow. Use when the user asks for a P&L, income statement, balance sheet, cash flow statement, full financials, or needs data for a proper DCF analysis. This is the most detailed financial data available.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        ticker: { type: 'string', description: 'Stock ticker symbol' },
+      },
+      required: ['ticker'],
+    },
+  },
+  {
+    name: 'get_earnings_history',
+    description: 'Get quarterly earnings history showing actual EPS vs estimated EPS for the last 4 quarters. Use when the user asks about earnings, earnings beats/misses, earnings surprises, or quarterly performance.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        ticker: { type: 'string', description: 'Stock ticker symbol' },
+      },
+      required: ['ticker'],
+    },
+  },
+  {
+    name: 'get_company_news_analysis',
+    description: 'Get recent news headlines for any company plus the analyst recommendation consensus. Use when the user asks "what is happening with X" or "why is X moving" or wants a comprehensive overview of a company they are researching. Combines news + analyst ratings in one call.',
     input_schema: {
       type: 'object',
       properties: {
@@ -1663,6 +1696,129 @@ async function executeChatTool(toolName, input, userId) {
         return { result: JSON.stringify(data) };
       } catch (err) {
         return { error: `Could not fetch financials for ${ticker}` };
+      }
+    }
+    case 'get_financial_statements': {
+      if (!process.env.FINNHUB_API_KEY) return { error: 'No API key configured' };
+      try {
+        const url = `https://finnhub.io/api/v1/stock/financials-reported?symbol=${ticker}&token=${process.env.FINNHUB_API_KEY}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (!data || !data.data || data.data.length === 0) {
+          return { error: `No financial statement data available for ${ticker}` };
+        }
+
+        // Get the two most recent filings (annual and/or quarterly)
+        const filings = data.data.slice(0, 2);
+        const statements = filings.map(filing => {
+          const report = filing.report || {};
+          const ic = report.ic || []; // income statement
+          const bs = report.bs || []; // balance sheet
+          const cf = report.cf || []; // cash flow
+
+          const find = (arr, ...labels) => {
+            for (const label of labels) {
+              const item = arr.find(i => i.concept && i.concept.toLowerCase().includes(label.toLowerCase()));
+              if (item && item.value != null) return item.value;
+            }
+            return null;
+          };
+
+          return {
+            period: filing.year + (filing.quarter ? ' Q' + filing.quarter : ' Annual'),
+            form: filing.form,
+            filed: filing.filedDate,
+            revenue: find(ic, 'Revenue', 'SalesRevenue', 'Revenues'),
+            costOfRevenue: find(ic, 'CostOfRevenue', 'CostOfGoods'),
+            grossProfit: find(ic, 'GrossProfit'),
+            operatingIncome: find(ic, 'OperatingIncome', 'OperatingProfit'),
+            netIncome: find(ic, 'NetIncome', 'ProfitLoss'),
+            eps: find(ic, 'EarningsPerShareDiluted', 'EarningsPerShare'),
+            totalAssets: find(bs, 'Assets'),
+            totalLiabilities: find(bs, 'Liabilities'),
+            totalEquity: find(bs, 'StockholdersEquity', 'Equity'),
+            cash: find(bs, 'CashAndCashEquivalents', 'Cash'),
+            totalDebt: find(bs, 'LongTermDebt', 'DebtNoncurrent'),
+            operatingCashFlow: find(cf, 'OperatingCashFlow', 'NetCashOperating'),
+            capex: find(cf, 'CapitalExpenditure', 'PaymentsForCapital'),
+          };
+        });
+
+        // Calculate derived metrics for the most recent period
+        const latest = statements[0];
+        if (latest.revenue && latest.costOfRevenue) {
+          latest.grossMargin = ((latest.revenue - latest.costOfRevenue) / latest.revenue * 100).toFixed(1) + '%';
+        }
+        if (latest.operatingIncome && latest.revenue) {
+          latest.operatingMargin = (latest.operatingIncome / latest.revenue * 100).toFixed(1) + '%';
+        }
+        if (latest.netIncome && latest.revenue) {
+          latest.netMargin = (latest.netIncome / latest.revenue * 100).toFixed(1) + '%';
+        }
+        if (latest.operatingCashFlow && latest.capex) {
+          latest.freeCashFlow = latest.operatingCashFlow - Math.abs(latest.capex);
+        }
+
+        return { result: JSON.stringify({ ticker, statements }) };
+      } catch (err) {
+        return { error: `Could not fetch financial statements for ${ticker}` };
+      }
+    }
+    case 'get_earnings_history': {
+      if (!process.env.FINNHUB_API_KEY) return { error: 'No API key configured' };
+      try {
+        const url = `https://finnhub.io/api/v1/stock/earnings?symbol=${ticker}&token=${process.env.FINNHUB_API_KEY}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (!Array.isArray(data) || data.length === 0) {
+          return { error: `No earnings data available for ${ticker}` };
+        }
+
+        const earnings = data.slice(0, 8).map(e => ({
+          period: e.period,
+          actual: e.actual,
+          estimate: e.estimate,
+          surprise: e.surprise,
+          surprisePct: e.surprisePercent,
+          beat: e.actual > e.estimate ? 'Beat' : e.actual < e.estimate ? 'Miss' : 'Met',
+        }));
+
+        return { result: JSON.stringify({ ticker, earnings }) };
+      } catch (err) {
+        return { error: `Could not fetch earnings for ${ticker}` };
+      }
+    }
+    case 'get_company_news_analysis': {
+      if (!process.env.FINNHUB_API_KEY) return { error: 'No API key configured' };
+      try {
+        const fmt = (d) => d.toISOString().slice(0, 10);
+        const to = fmt(new Date());
+        const from = fmt(new Date(Date.now() - 14 * 24 * 60 * 60 * 1000));
+
+        const [newsRes, recRes, quoteData] = await Promise.all([
+          fetch(`https://finnhub.io/api/v1/company-news?symbol=${ticker}&from=${from}&to=${to}&token=${process.env.FINNHUB_API_KEY}`).then(r => r.json()),
+          fetch(`https://finnhub.io/api/v1/stock/recommendation?symbol=${ticker}&token=${process.env.FINNHUB_API_KEY}`).then(r => r.json()),
+          fetchQuote(ticker),
+        ]);
+
+        const headlines = Array.isArray(newsRes)
+          ? newsRes.slice(0, 6).map(a => `${a.headline} (${a.source}, ${new Date(a.datetime * 1000).toLocaleDateString()})`)
+          : [];
+
+        const rec = Array.isArray(recRes) && recRes.length > 0 ? recRes[0] : null;
+        const consensus = rec
+          ? `Analyst consensus: ${rec.strongBuy} strong buy, ${rec.buy} buy, ${rec.hold} hold, ${rec.sell} sell, ${rec.strongSell} strong sell`
+          : 'No analyst data available';
+
+        const priceInfo = quoteData.price
+          ? `Current price: $${quoteData.price.toFixed(2)}, ${quoteData.changePercent > 0 ? '+' : ''}${quoteData.changePercent.toFixed(2)}% today`
+          : 'Price data unavailable';
+
+        return { result: JSON.stringify({ ticker, priceInfo, consensus, headlines }) };
+      } catch (err) {
+        return { error: `Could not fetch news analysis for ${ticker}` };
       }
     }
     case 'get_chart_data': {
@@ -1815,17 +1971,23 @@ ${watchlistContext}${alertsContext}
 Your tools:
 - add_to_watchlist / remove_from_watchlist: manage their watchlist when asked
 - get_stock_quote: pull live price for any ticker (use this before answering about stocks not in the watchlist above)
-- get_financials: pull PE, EPS, margins, cash flow, growth rates, etc. Use for valuation questions, "is X overvalued," DCF requests, or fundamental analysis
-- get_chart_data: pull price history to render a visual chart in the chat. Use when they want to see a chart or trend
-- set_alert: create price alerts. Understand natural language like "tell me if AAPL drops below 200"
-- place_trade: place a paper trade (buy or sell shares). This is practice trading with fake money. When the user says "buy 10 shares of NVDA," use this tool. Always state the order details before placing.
-- get_positions: show the user's paper trading portfolio, positions, P/L, and account balance. Use when they ask "what do I own" or "show my positions" or "how's my portfolio doing" (in the trading sense, not watchlist sense)
+- get_financials: pull PE, EPS, margins, cash flow, growth rates. Good for quick valuation snapshots.
+- get_financial_statements: pull ACTUAL income statement, balance sheet, and cash flow data from SEC filings. Use this for P&L analysis, DCF valuations, or when someone wants real financial numbers (revenue, net income, total assets, free cash flow). This is the heavy-duty tool.
+- get_earnings_history: pull quarterly earnings beats/misses for the last 8 quarters. Use when they ask about earnings performance or consistency.
+- get_company_news_analysis: pull recent headlines + analyst consensus + current price in one call. Use for "what's happening with X" or "why is X moving" questions.
+- get_chart_data: pull price history to render a visual chart in the chat
+- set_alert: create price alerts
+- place_trade: place a paper trade (buy or sell shares with practice money)
+- get_positions: show the user's paper trading portfolio
 
 How to behave:
 - Lead with the answer, not the caveats. If they ask "how's my portfolio," start with the verdict, then the breakdown.
 - Use numbers. Don't say "the stock is doing well." Say "up 4% today, trading near its 52-week high."
+- For DCF analysis: use get_financial_statements to pull real revenue, net income, and free cash flow. Then walk through the math: project future cash flows based on historical growth, apply a discount rate (typically 8-12%), calculate terminal value, sum to get intrinsic value per share, compare to current price. Show your work.
+- For P&L questions: use get_financial_statements and present the income statement clearly: revenue, COGS, gross profit, operating income, net income, with margins calculated.
+- For earnings questions: use get_earnings_history and highlight the beat/miss pattern.
 - When pulling financials for valuation, walk through the logic: what the PE tells you, how margins compare, what growth looks like. Make it educational.
-- Keep it tight. 2-3 short paragraphs max unless they're asking for deep analysis.
+- Keep it tight. 2-3 short paragraphs max unless they're asking for deep analysis like a DCF (which should be thorough).
 - Never use em dashes. Use periods or commas instead.
 - Use their name occasionally but not every message.
 - If you don't know something, say so. Don't make up numbers.
