@@ -574,6 +574,20 @@
     }
     .cat-auto-btn:hover { border-color: var(--green); color: var(--ink); }
 
+    .cat-group-header {
+      display: flex; align-items: center; gap: 8px;
+      font-family: var(--font-ui); font-size: 12px; font-weight: 700;
+      letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--ink-muted); padding: 16px 0 8px;
+      border-bottom: 1px solid var(--rule-strong); margin-bottom: 8px;
+    }
+    .cat-group-header:first-child { padding-top: 0; }
+    .cat-group-count {
+      font-family: var(--font-data); font-size: 11px; font-weight: 700;
+      color: var(--ink-faint); background: var(--paper-sunken);
+      padding: 1px 6px; border-radius: 2px;
+    }
+
     .card {
       display: flex;
       background: var(--paper-raise) linear-gradient(var(--margin-red), var(--margin-red)) no-repeat 15px 0 / 1px 100%;
@@ -1326,7 +1340,46 @@
         document.title = `${items.length} stocks | Trade Track`;
       }
 
-      listEl.innerHTML = items.map(cardHtml).join('');
+      listEl.innerHTML = renderGrouped();
+    }
+
+    function renderGrouped() {
+      // Check if any stocks have categories
+      var hasCategories = items.some(function(i) { return i.category; });
+
+      // If no categories or a specific filter is active, render flat
+      if (!hasCategories || activeCategory) {
+        var filtered = activeCategory
+          ? items.filter(function(i) { return i.category === activeCategory; })
+          : items;
+        return filtered.map(cardHtml).join('');
+      }
+
+      // Group by category
+      var groups = {};
+      var uncategorized = [];
+      items.forEach(function(item) {
+        if (item.category) {
+          if (!groups[item.category]) groups[item.category] = [];
+          groups[item.category].push(item);
+        } else {
+          uncategorized.push(item);
+        }
+      });
+
+      var html = '';
+      var sortedKeys = Object.keys(groups).sort();
+      sortedKeys.forEach(function(cat) {
+        html += '<div class="cat-group-header">' + cat + ' <span class="cat-group-count">' + groups[cat].length + '</span></div>';
+        html += groups[cat].map(cardHtml).join('');
+      });
+
+      if (uncategorized.length > 0) {
+        html += '<div class="cat-group-header">Uncategorized <span class="cat-group-count">' + uncategorized.length + '</span></div>';
+        html += uncategorized.map(cardHtml).join('');
+      }
+
+      return html;
     }
 
     function updateLastUpdatedLabel() {
