@@ -381,6 +381,36 @@
     }
     .refresh-btn:hover { border-color: var(--green); color: var(--ink); }
 
+    .view-toggle {
+      background: var(--paper-bright); border: 1px solid var(--rule-strong);
+      border-radius: 2px; padding: 7px 12px; font-size: 11px;
+      font-weight: 600; font-family: var(--font-ui); color: var(--ink-faint);
+      cursor: pointer;
+    }
+    .view-toggle:hover { border-color: var(--green); color: var(--ink); }
+    .view-toggle.active { background: var(--green); color: #F3EEDF; border-color: var(--green); }
+
+    .table-view {
+      width: 100%;
+      background: var(--paper-raise) linear-gradient(var(--margin-red), var(--margin-red)) no-repeat 15px 0 / 1px 100%;
+      border: 1px solid var(--rule-strong); border-radius: 3px;
+      box-shadow: var(--shadow-paper); border-collapse: collapse;
+    }
+    .table-view th {
+      text-align: left; padding: 10px 14px 10px 28px;
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--ink-faint);
+      border-bottom: 2px solid var(--rule-strong); background: var(--paper-sunken);
+    }
+    .table-view th:first-child { padding-left: 28px; }
+    .table-view td { padding: 10px 14px; border-bottom: 1px solid var(--rule); }
+    .table-view td:first-child { padding-left: 28px; }
+    .table-view tr:last-child td { border-bottom: none; }
+    .table-view tr:hover td { background: var(--paper-bright); cursor: pointer; }
+    .table-view .mono { font-family: var(--font-data); font-weight: 700; }
+    .table-view .right { text-align: right; }
+    .table-view .faint { color: var(--ink-faint); font-size: 11px; }
+
     /* ---- Summary strip ---- */
     .summary {
       display: flex;
@@ -971,7 +1001,11 @@
     <div class="main-content">
     <div class="meta-row">
       <div class="meta" id="lastUpdated">not yet loaded</div>
-      <button class="refresh-btn" id="refreshBtn">↻ Refresh</button>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="view-toggle active" id="viewCards" onclick="setView('cards')">Cards</button>
+        <button class="view-toggle" id="viewTable" onclick="setView('table')">Table</button>
+        <button class="refresh-btn" id="refreshBtn">↻ Refresh</button>
+      </div>
     </div>
 
     <div class="summary" id="summary" style="display:none;">
@@ -1340,7 +1374,7 @@
         document.title = `${items.length} stocks | Trade Track`;
       }
 
-      listEl.innerHTML = renderGrouped();
+      listEl.innerHTML = currentView === 'table' ? renderTable() : renderGrouped();
     }
 
     function renderGrouped() {
@@ -1379,6 +1413,36 @@
         html += uncategorized.map(cardHtml).join('');
       }
 
+      return html;
+    }
+
+    function renderTable() {
+      var filtered = activeCategory
+        ? items.filter(function(i) { return i.category === activeCategory; })
+        : items;
+
+      if (filtered.length === 0) return '<div class="empty">No stocks to show</div>';
+
+      var html = '<table class="table-view"><tr><th>Symbol</th><th>Company</th><th>Category</th><th class="right">Price</th><th class="right">Change</th><th class="right">Day low</th><th class="right">Day high</th></tr>';
+      filtered.forEach(function(item) {
+        var q = quotesByTicker[item.ticker];
+        var price = q && !q.error ? '$' + q.price.toFixed(2) : '-';
+        var changePct = q && !q.error ? fmtPct(q.changePercent) : '-';
+        var dir = q && !q.error ? (q.changePercent > 0 ? 'up' : q.changePercent < 0 ? 'down' : '') : '';
+        var lo = q && !q.error && q.dayLow ? '$' + q.dayLow.toFixed(2) : '-';
+        var hi = q && !q.error && q.dayHigh ? '$' + q.dayHigh.toFixed(2) : '-';
+        var dirClass = dir === 'up' ? ' style="color:var(--up)"' : dir === 'down' ? ' style="color:var(--down)"' : '';
+        html += '<tr onclick="window.location.href=\'/stock.html?t=' + encodeURIComponent(item.ticker) + '\'">';
+        html += '<td class="mono">' + esc(item.ticker) + '</td>';
+        html += '<td class="faint">' + esc(item.name || '') + '</td>';
+        html += '<td class="faint">' + esc(item.category || '') + '</td>';
+        html += '<td class="right mono">' + price + '</td>';
+        html += '<td class="right mono"' + dirClass + '>' + changePct + '</td>';
+        html += '<td class="right mono faint">' + lo + '</td>';
+        html += '<td class="right mono faint">' + hi + '</td>';
+        html += '</tr>';
+      });
+      html += '</table>';
       return html;
     }
 
@@ -1808,6 +1872,14 @@
     }
 
     var activeCategory = '';
+    var currentView = 'cards';
+
+    function setView(view) {
+      currentView = view;
+      document.getElementById('viewCards').classList.toggle('active', view === 'cards');
+      document.getElementById('viewTable').classList.toggle('active', view === 'table');
+      render();
+    }
 
     async function loadCategories() {
       try {
