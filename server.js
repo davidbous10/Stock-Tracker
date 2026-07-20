@@ -2177,6 +2177,90 @@ app.get('/api/trading/status', requireAuth, (req, res) => {
   res.json({ enabled: tradingEnabled() });
 });
 
+// Earnings calendar for watchlist stocks
+app.get('/api/earnings-calendar', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  if (!process.env.FINNHUB_API_KEY) return res.status(500).json({ error: 'API key not configured' });
+
+  const cached = newsCacheGet('earnings:' + req.session.userId);
+  if (cached) return res.json({ earnings: cached });
+
+  try {
+    const items = await getAllWatchlistItems(req.session.userId);
+    const tickers = items.map(i => i.ticker).slice(0, 15);
+    const results = [];
+
+    for (const ticker of tickers) {
+      try {
+        const url = `https://finnhub.io/api/v1/stock/earnings?symbol=${ticker}&token=${process.env.FINNHUB_API_KEY}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        if (Array.isArray(data) && data.length > 0) {
+          results.push({ ticker, lastEarnings: data[0].period, lastActual: data[0].actual, lastEstimate: data[0].estimate });
+        }
+      } catch (e) {}
+    }
+
+    // Also check for upcoming earnings via calendar
+    const from = new Date().toISOString().slice(0, 10);
+    const to = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    try {
+      const calUrl = `https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${process.env.FINNHUB_API_KEY}`;
+      const calRes = await fetch(calUrl);
+      const calData = await calRes.json();
+      if (calData && calData.earningsCalendar) {
+        const upcoming = calData.earningsCalendar
+          .filter(e => tickers.includes(e.symbol))
+          .map(e => ({ ticker: e.symbol, date: e.date, estimate: e.epsEstimate, quarter: e.quarter, year: e.year }));
+        newsCacheSet('earnings:' + req.session.userId, { past: results, upcoming });
+        return res.json({ earnings: { past: results, upcoming } });
+      }
+    } catch (e) {}
+
+    newsCacheSet('earnings:' + req.session.userId, { past: results, upcoming: [] });
+    res.json({ earnings: { past: results, upcoming: [] } });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not load earnings data' });
+  }
+});
+
+// Watchlist performance over time (aggregated from price_history)
+app.get('/api/watchlist-performance', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  try {
+    const items = await getAllWatchlistItems(req.session.userId);
+    const tickers = items.map(i => i.ticker);
+    if (tickers.length === 0) return res.json({ points: [] });
+
+    // Get daily aggregated performance
+    const placeholders = tickers.map((_, i) => `$${i + 1}`).join(',');
+    const { rows } = await pool.query(`
+      SELECT DATE(recorded_at) AS day,
+             AVG(price) AS avg_price,
+             COUNT(DISTINCT ticker) AS stock_count
+      FROM price_history
+      WHERE ticker IN (${placeholders})
+      GROUP BY DATE(recorded_at)
+      ORDER BY day ASC
+    `, tickers);
+
+    if (rows.length === 0) return res.json({ points: [] });
+
+    // Normalize to percentage change from first day
+    const baseline = parseFloat(rows[0].avg_price);
+    const points = rows.map(r => ({
+      day: r.day,
+      avgPrice: parseFloat(r.avg_price),
+      changePct: ((parseFloat(r.avg_price) - baseline) / baseline * 100).toFixed(2),
+      stocks: parseInt(r.stock_count),
+    }));
+
+    res.json({ points });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
 // Referral URLs (read from environment variables)
 app.get('/api/referral-urls', requireAuth, (req, res) => {
   res.json({
