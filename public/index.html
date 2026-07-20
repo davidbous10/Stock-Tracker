@@ -503,6 +503,29 @@
       padding: 15px 0;
       margin-top: 30px;
     }
+
+    .perf-card {
+      background: var(--paper-raise) linear-gradient(var(--margin-red), var(--margin-red)) no-repeat 15px 0 / 1px 100%;
+      border: 1px solid var(--rule-strong); border-radius: 3px;
+      box-shadow: var(--shadow-paper);
+      padding: 14px 18px 14px 26px;
+    }
+    .perf-label { font-family: var(--font-data); font-size: 10px; color: var(--ink-faint); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+    .perf-chart { width: 100%; height: 70px; display: block; }
+    .perf-dates { display: flex; justify-content: space-between; font-family: var(--font-data); font-size: 9px; color: var(--ink-faint); margin-top: 4px; }
+    .perf-empty { font-size: 12px; color: var(--ink-faint); font-style: italic; padding: 12px 0; }
+
+    .earn-list { display: flex; flex-direction: column; gap: 6px; }
+    .earn-item {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--paper-raise); border: 1px solid var(--rule-strong);
+      border-radius: 3px; padding: 10px 14px;
+      font-size: 12px;
+    }
+    .earn-ticker { font-family: var(--font-data); font-weight: 700; min-width: 50px; }
+    .earn-date { font-family: var(--font-data); font-size: 11px; color: var(--ink-muted); }
+    .earn-est { font-family: var(--font-data); font-size: 11px; color: var(--ink-faint); margin-left: auto; }
+    .earn-empty { font-size: 12px; color: var(--ink-faint); font-style: italic; padding: 8px 0; }
     .cta-watchlist:hover { background: var(--green-bright); }
 
     .skel-pulse-card {
@@ -724,6 +747,16 @@
       </div>
     </div>
 
+    <div class="section-label">Watchlist performance</div>
+    <div id="perfChart">
+      <div class="skeleton" style="width:100%;height:80px;border-radius:3px"></div>
+    </div>
+
+    <div class="section-label">Upcoming earnings</div>
+    <div id="earningsCalendar">
+      <div class="skeleton skel-line" style="width:60%"></div>
+    </div>
+
     <a href="/watchlist.html" class="cta-watchlist">Go to your Watchlist →</a>
     </div>
   </div>
@@ -776,7 +809,92 @@
       loadMover();
 
       // Auto-refresh every 30 seconds, same as the watchlist
+      loadPerfChart();
+      loadEarnings();
+
       setInterval(() => { loadPulse(); loadMover(); }, 30000);
+    }
+
+    async function loadPerfChart() {
+      const el = document.getElementById('perfChart');
+      try {
+        const res = await AuthGuard.fetch('/api/watchlist-performance');
+        const data = await res.json();
+        const points = data.points || [];
+
+        if (points.length < 2) {
+          el.innerHTML = '<div class="perf-empty">Performance data will appear once price history accumulates.</div>';
+          return;
+        }
+
+        const W = 600, H = 70, pad = 4;
+        const values = points.map(p => parseFloat(p.changePct));
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const range = max - min || 1;
+
+        const coords = values.map((v, i) => {
+          const x = pad + (i / (values.length - 1)) * (W - 2 * pad);
+          const y = pad + (1 - (v - min) / range) * (H - 2 * pad);
+          return `${x.toFixed(1)},${y.toFixed(1)}`;
+        }).join(' ');
+
+        const trendUp = values[values.length - 1] >= 0;
+        const stroke = trendUp ? 'var(--up)' : 'var(--down)';
+        const lastPct = values[values.length - 1];
+        const pctLabel = lastPct >= 0 ? `+${lastPct}%` : `(${Math.abs(lastPct)}%)`;
+        const areaCoords = coords + ` ${W - pad},${H} ${pad},${H}`;
+        const fillId = 'pfg' + Date.now();
+
+        const firstDay = new Date(points[0].day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const lastDay = new Date(points[points.length - 1].day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+        el.innerHTML = `<div class="perf-card">
+          <div class="perf-label">Watchlist avg ${pctLabel} since ${firstDay}</div>
+          <svg class="perf-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+            <defs><linearGradient id="${fillId}" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="${stroke}" stop-opacity="0.18"/>
+              <stop offset="100%" stop-color="${stroke}" stop-opacity="0.02"/>
+            </linearGradient></defs>
+            <polygon points="${areaCoords}" fill="url(#${fillId})" />
+            <polyline points="${coords}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+          </svg>
+          <div class="perf-dates"><span>${firstDay}</span><span>${lastDay}</span></div>
+        </div>`;
+      } catch (err) {
+        el.innerHTML = '<div class="perf-empty">Could not load performance data.</div>';
+      }
+    }
+
+    async function loadEarnings() {
+      const el = document.getElementById('earningsCalendar');
+      try {
+        const res = await AuthGuard.fetch('/api/earnings-calendar');
+        const data = await res.json();
+        const earnings = data.earnings || {};
+        const upcoming = earnings.upcoming || [];
+
+        if (upcoming.length === 0) {
+          el.innerHTML = '<div class="earn-empty">No upcoming earnings for your watchlist stocks in the next 30 days.</div>';
+          return;
+        }
+
+        upcoming.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+        el.innerHTML = '<div class="earn-list">' + upcoming.map(e => {
+          const d = new Date(e.date);
+          const dateStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+          const daysAway = Math.ceil((d - new Date()) / (1000 * 60 * 60 * 24));
+          const daysLabel = daysAway === 0 ? 'Today' : daysAway === 1 ? 'Tomorrow' : `In ${daysAway} days`;
+          return `<a href="/stock.html?t=${encodeURIComponent(e.ticker)}" class="earn-item" style="text-decoration:none;color:inherit">
+            <span class="earn-ticker">${esc(e.ticker)}</span>
+            <span class="earn-date">${dateStr} (${daysLabel})</span>
+            ${e.estimate ? `<span class="earn-est">Est. $${e.estimate}</span>` : ''}
+          </a>`;
+        }).join('') + '</div>';
+      } catch (err) {
+        el.innerHTML = '<div class="earn-empty">Could not load earnings data.</div>';
+      }
     }
 
     async function loadPulse() {
