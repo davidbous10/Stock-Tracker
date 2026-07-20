@@ -43,6 +43,7 @@ const AuthGuard = (function () {
     tabSignup.classList.toggle('active', mode === 'signup');
     authSubmit.textContent = mode === 'login' ? 'Log in' : 'Sign up';
     authHint.textContent = mode === 'signup' ? 'Password must be at least 8 characters' : '';
+    authHint.innerHTML = mode === 'login' ? '<a href="/reset.html" style="color:var(--ink-faint,#9A9C8B);font-size:11px;text-decoration:none">Forgot password?</a>' : authHint.textContent;
     authPassword.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
     authSubmit.dataset.mode = mode;
 
