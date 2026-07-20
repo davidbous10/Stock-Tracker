@@ -272,6 +272,30 @@ async function initDb(retries = 10, delayMs = 3000) {
       // Watchlist categories
       await pool.query(`ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS category TEXT DEFAULT NULL`);
 
+      // Password reset tokens
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS password_resets (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id),
+          token TEXT NOT NULL UNIQUE,
+          expires_at TIMESTAMP NOT NULL,
+          used BOOLEAN DEFAULT false,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+
+      // Chat history for Trackr conversation memory
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS chat_history (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id),
+          role TEXT NOT NULL,
+          content TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_chat_history_user ON chat_history (user_id, created_at DESC)`);
+
       console.log('Database connected and ready.');
       dbReady = true;
       return;
@@ -474,6 +498,80 @@ app.post('/api/auth/change-name', requireAuth, async (req, res) => {
     res.json({ ok: true, name });
   } catch (err) {
     res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Password reset: request a reset link
+app.post('/api/auth/forgot-password', async (req, res) => {
+  if (!requireDb(res)) return;
+  const email = (req.body.email || '').trim().toLowerCase();
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+
+  try {
+    const { rows } = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    // Always return success (don't reveal if email exists)
+    if (rows.length === 0) return res.json({ ok: true });
+
+    const userId = rows[0].id;
+    // Generate a secure random token
+    const crypto = require('crypto');
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await pool.query(
+      'INSERT INTO password_resets (user_id, token, expires_at) VALUES ($1, $2, $3)',
+      [userId, token, expiresAt]
+    );
+
+    // Send reset email
+    if (process.env.EMAIL_API_KEY) {
+      const resetUrl = `${req.protocol}://${req.get('host')}/reset.html?token=${token}`;
+      try {
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.EMAIL_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: 'Trade Track <onboarding@resend.dev>',
+            to: [email],
+            subject: 'Reset your Trade Track password',
+            text: `You requested a password reset for Trade Track.\n\nClick here to reset your password:\n${resetUrl}\n\nThis link expires in 1 hour. If you didn't request this, ignore this email.`,
+          }),
+        });
+      } catch (e) {}
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Something went wrong' });
+  }
+});
+
+// Password reset: verify token and set new password
+app.post('/api/auth/reset-password', async (req, res) => {
+  if (!requireDb(res)) return;
+  const { token, password } = req.body;
+  if (!token || !password) return res.status(400).json({ error: 'Token and password are required' });
+  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT user_id FROM password_resets WHERE token = $1 AND used = false AND expires_at > NOW()',
+      [token]
+    );
+    if (rows.length === 0) return res.status(400).json({ error: 'Invalid or expired reset link' });
+
+    const userId = rows[0].user_id;
+    const passwordHash = await bcrypt.hash(password, 10);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
+    await pool.query('UPDATE password_resets SET used = true WHERE token = $1', [token]);
+
+    logActivity(userId, 'password_reset');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Something went wrong' });
   }
 });
 
@@ -1919,6 +2017,20 @@ async function executeChatTool(toolName, input, userId) {
   }
 }
 
+// Chat history for restoring previous conversations
+app.get('/api/chat/history', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  try {
+    const { rows } = await pool.query(
+      'SELECT role, content, created_at FROM chat_history WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10',
+      [req.session.userId]
+    );
+    res.json({ messages: rows.reverse() });
+  } catch (err) {
+    res.json({ messages: [] });
+  }
+});
+
 app.post('/api/chat', requireAuth, async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) {
     return res.status(500).json({ error: 'AI assistant is not configured. Add ANTHROPIC_API_KEY in Railway.' });
@@ -1933,6 +2045,20 @@ app.post('/api/chat', requireAuth, async (req, res) => {
   const trimmed = messages.slice(-20);
 
   try {
+    // Load recent chat history for conversation memory
+    let historyContext = '';
+    try {
+      const { rows: pastMsgs } = await pool.query(
+        'SELECT role, content, created_at FROM chat_history WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20',
+        [req.session.userId]
+      );
+      if (pastMsgs.length > 0) {
+        const reversed = pastMsgs.reverse();
+        historyContext = '\n\nRecent conversation history (from previous sessions):\n' +
+          reversed.map(m => `${m.role}: ${m.content}`).join('\n');
+      }
+    } catch (e) {}
+
     // Gather user context
     const items = await getAllWatchlistItems(req.session.userId);
     const tickers = items.map(i => i.ticker);
@@ -1966,7 +2092,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 
 User: ${userName}
 
-${watchlistContext}${alertsContext}
+${watchlistContext}${alertsContext}${historyContext}
 
 Your tools:
 - add_to_watchlist / remove_from_watchlist: manage their watchlist when asked
@@ -2073,6 +2199,15 @@ How to behave:
       .join('\n');
 
     const watchlistChanged = rounds > 0;
+
+    // Save the user's message and AI response to chat history
+    const lastUserMsg = trimmed[trimmed.length - 1];
+    if (lastUserMsg && lastUserMsg.role === 'user' && typeof lastUserMsg.content === 'string') {
+      pool.query('INSERT INTO chat_history (user_id, role, content) VALUES ($1, $2, $3)', [req.session.userId, 'user', lastUserMsg.content.slice(0, 2000)]).catch(() => {});
+    }
+    if (reply) {
+      pool.query('INSERT INTO chat_history (user_id, role, content) VALUES ($1, $2, $3)', [req.session.userId, 'assistant', reply.slice(0, 2000)]).catch(() => {});
+    }
 
     logActivity(req.session.userId, 'chat', trimmed[trimmed.length - 1].content.slice(0, 100));
     res.json({ reply, watchlistChanged, charts });
