@@ -2080,6 +2080,32 @@ app.get('/api/watchlist/categories', requireAuth, async (req, res) => {
   }
 });
 
+// Auto-categorize: fetch each stock's industry from Finnhub and set as category
+app.post('/api/watchlist/auto-categorize', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  if (!process.env.FINNHUB_API_KEY) {
+    return res.status(500).json({ error: 'API key not configured' });
+  }
+  try {
+    const items = await getAllWatchlistItems(req.session.userId);
+    let updated = 0;
+    for (const item of items) {
+      const profile = await fetchCompanyProfile(item.ticker);
+      if (profile && profile.industry) {
+        await pool.query(
+          'UPDATE watchlist SET category = $1 WHERE ticker = $2 AND user_id = $3',
+          [profile.industry, item.ticker, req.session.userId]
+        );
+        updated++;
+      }
+    }
+    logActivity(req.session.userId, 'auto_categorize', `${updated} stocks tagged`);
+    res.json({ ok: true, updated });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
 // Account info: buying power, equity, cash
 app.get('/api/trading/account', requireAuth, async (req, res) => {
   if (!tradingEnabled()) return res.status(500).json({ error: 'Trading not configured' });
