@@ -567,6 +567,12 @@
       border-radius: 2px; padding: 3px 6px; font-size: 10px;
       font-family: var(--font-ui); color: var(--ink); margin-left: 6px;
     }
+    .cat-auto-btn {
+      background: none; border: 1px dashed var(--rule-strong);
+      border-radius: 2px; padding: 6px 14px; font-size: 11px;
+      font-family: var(--font-ui); color: var(--ink-faint); cursor: pointer;
+    }
+    .cat-auto-btn:hover { border-color: var(--green); color: var(--ink); }
 
     .card {
       display: flex;
@@ -971,6 +977,9 @@
 
     <div class="cat-filters" id="catFilters" style="display:none">
       <button class="cat-btn active" data-cat="" onclick="filterCategory('')">All</button>
+    </div>
+    <div style="margin-bottom:14px">
+      <button class="cat-auto-btn" id="autoCatBtn" onclick="autoCategorizeFn()">Auto-categorize by industry</button>
     </div>
 
     <div class="add-wrap">
@@ -1786,12 +1795,35 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ category: cat.trim() }),
         });
-        // Update local data and re-render
         var item = items.find(function(i) { return i.ticker === ticker; });
         if (item) item.category = cat.trim() || null;
         render();
         loadCategories();
       } catch (err) {}
+    }
+
+    async function autoCategorizeFn() {
+      var btn = document.getElementById('autoCatBtn');
+      btn.disabled = true;
+      btn.textContent = 'Categorizing...';
+      try {
+        var res = await AuthGuard.fetch('/api/watchlist/auto-categorize', { method: 'POST' });
+        var data = await res.json();
+        if (res.ok) {
+          btn.textContent = data.updated + ' stocks tagged!';
+          // Reload watchlist to show new categories
+          await loadWatchlist();
+          loadPrices();
+          loadCategories();
+          setTimeout(function() { btn.textContent = 'Auto-categorize by industry'; btn.disabled = false; }, 3000);
+        } else {
+          btn.textContent = data.error || 'Failed';
+          setTimeout(function() { btn.textContent = 'Auto-categorize by industry'; btn.disabled = false; }, 3000);
+        }
+      } catch (err) {
+        btn.textContent = 'Could not reach server';
+        setTimeout(function() { btn.textContent = 'Auto-categorize by industry'; btn.disabled = false; }, 3000);
+      }
     }
   </script>
 
