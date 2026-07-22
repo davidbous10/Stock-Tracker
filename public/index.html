@@ -543,6 +543,20 @@
     .insight-body { font-size: 14px; font-weight: 600; line-height: 1.5; }
     .insight-sub { font-size: 12px; color: var(--ink-muted); margin-top: 6px; }
     .insight-cta { font-size: 11px; color: var(--green-bright); font-weight: 600; margin-top: 8px; }
+
+    .market-status {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: 8px; padding: 4px 12px;
+      border-radius: 2px; font-size: 11px; font-weight: 600;
+      font-family: var(--font-data); letter-spacing: 0.03em;
+    }
+    .market-status.open { background: var(--up-bg); color: var(--up); }
+    .market-status.closed { background: var(--down-bg); color: var(--down); }
+    .market-status.premarket { background: #F0E8D6; color: var(--brass); }
+    .market-status-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .market-status.open .market-status-dot { background: var(--up); }
+    .market-status.closed .market-status-dot { background: var(--down); }
+    .market-status.premarket .market-status-dot { background: var(--brass); }
     .cta-watchlist:hover { background: var(--green-bright); }
 
     .skel-pulse-card {
@@ -747,6 +761,7 @@
     <div class="greeting">
       <div class="greeting-text" id="greetingText">Welcome back</div>
       <div class="greeting-date" id="greetingDate"></div>
+      <div class="market-status" id="marketStatus"></div>
     </div>
 
     <div class="section-label">Market pulse</div>
@@ -831,8 +846,50 @@
       loadInsight();
       loadPerfChart();
       loadEarnings();
+      updateMarketStatus();
 
       setInterval(() => { loadPulse(); loadMover(); }, 30000);
+      setInterval(updateMarketStatus, 60000);
+    }
+
+    function updateMarketStatus() {
+      const el = document.getElementById('marketStatus');
+      const now = new Date();
+
+      // Convert to Eastern time
+      const eastern = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+      const h = eastern.getHours();
+      const m = eastern.getMinutes();
+      const day = eastern.getDay(); // 0=Sun, 6=Sat
+      const mins = h * 60 + m;
+
+      const marketOpen = 9 * 60 + 30;  // 9:30 AM
+      const marketClose = 16 * 60;      // 4:00 PM
+      const preOpen = 4 * 60;           // 4:00 AM pre-market
+      const afterClose = 20 * 60;       // 8:00 PM after-hours
+
+      if (day === 0 || day === 6) {
+        el.className = 'market-status closed';
+        el.innerHTML = '<span class="market-status-dot"></span>Market closed (weekend)';
+      } else if (mins >= marketOpen && mins < marketClose) {
+        const remaining = marketClose - mins;
+        const rh = Math.floor(remaining / 60);
+        const rm = remaining % 60;
+        el.className = 'market-status open';
+        el.innerHTML = '<span class="market-status-dot"></span>Market open · closes in ' + rh + 'h ' + rm + 'm';
+      } else if (mins >= preOpen && mins < marketOpen) {
+        const until = marketOpen - mins;
+        const uh = Math.floor(until / 60);
+        const um = until % 60;
+        el.className = 'market-status premarket';
+        el.innerHTML = '<span class="market-status-dot"></span>Pre-market · opens in ' + uh + 'h ' + um + 'm';
+      } else if (mins >= marketClose && mins < afterClose) {
+        el.className = 'market-status closed';
+        el.innerHTML = '<span class="market-status-dot"></span>After hours · market closed';
+      } else {
+        el.className = 'market-status closed';
+        el.innerHTML = '<span class="market-status-dot"></span>Market closed';
+      }
     }
 
     async function loadInsight() {
