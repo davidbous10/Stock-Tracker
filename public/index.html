@@ -526,6 +526,23 @@
     .earn-date { font-family: var(--font-data); font-size: 11px; color: var(--ink-muted); }
     .earn-est { font-family: var(--font-data); font-size: 11px; color: var(--ink-faint); margin-left: auto; }
     .earn-empty { font-size: 12px; color: var(--ink-faint); font-style: italic; padding: 8px 0; }
+
+    .insight-card {
+      background: var(--paper-raise) linear-gradient(var(--margin-red), var(--margin-red)) no-repeat 15px 0 / 1px 100%;
+      border: 1px solid var(--rule-strong); border-radius: 3px;
+      box-shadow: var(--shadow-paper);
+      padding: 16px 20px 16px 28px; margin-bottom: 18px;
+      cursor: pointer; text-decoration: none; display: block; color: inherit;
+    }
+    .insight-card:hover { border-color: var(--brass-soft); }
+    .insight-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .insight-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .insight-dot.up { background: var(--up); }
+    .insight-dot.down { background: var(--down); }
+    .insight-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-faint); }
+    .insight-body { font-size: 14px; font-weight: 600; line-height: 1.5; }
+    .insight-sub { font-size: 12px; color: var(--ink-muted); margin-top: 6px; }
+    .insight-cta { font-size: 11px; color: var(--green-bright); font-weight: 600; margin-top: 8px; }
     .cta-watchlist:hover { background: var(--green-bright); }
 
     .skel-pulse-card {
@@ -747,6 +764,8 @@
       </div>
     </div>
 
+    <div id="insightCard" style="display:none"></div>
+
     <div class="section-label">Watchlist performance</div>
     <div id="perfChart">
       <div class="skeleton" style="width:100%;height:80px;border-radius:3px"></div>
@@ -809,10 +828,72 @@
       loadMover();
 
       // Auto-refresh every 30 seconds, same as the watchlist
+      loadInsight();
       loadPerfChart();
       loadEarnings();
 
       setInterval(() => { loadPulse(); loadMover(); }, 30000);
+    }
+
+    async function loadInsight() {
+      const el = document.getElementById('insightCard');
+      try {
+        const [wlRes, pricesRes] = await Promise.all([
+          AuthGuard.fetch('/api/watchlist'),
+          AuthGuard.fetch('/api/prices'),
+        ]);
+        const wlData = await wlRes.json();
+        const pricesData = await pricesRes.json();
+        const items = wlData.items || [];
+        const quotes = pricesData.quotes || [];
+
+        if (items.length === 0 || quotes.length === 0) return;
+
+        let biggest = null;
+        let biggestAbs = 0;
+        quotes.forEach(q => {
+          if (q.error || q.changePercent == null) return;
+          const abs = Math.abs(q.changePercent);
+          if (abs > biggestAbs) { biggestAbs = abs; biggest = q; }
+        });
+
+        if (!biggest || biggestAbs < 1) return;
+
+        const item = items.find(i => i.ticker === biggest.ticker);
+        const name = item && item.name ? item.name : biggest.ticker;
+        const dir = biggest.changePercent > 0 ? 'up' : 'down';
+        const pctStr = biggest.changePercent > 0
+          ? `+${biggest.changePercent.toFixed(2)}%`
+          : `(${Math.abs(biggest.changePercent).toFixed(2)}%)`;
+        const verb = biggest.changePercent > 0 ? 'up' : 'down';
+        const question = biggest.changePercent > 0
+          ? `Why is ${biggest.ticker} up today?`
+          : `Why is ${biggest.ticker} down today?`;
+
+        el.innerHTML = `
+          <div class="insight-card" onclick="openTrackrWith('${question}')">
+            <div class="insight-header">
+              <div class="insight-dot ${dir}"></div>
+              <div class="insight-label">Trackr insight</div>
+            </div>
+            <div class="insight-body">${esc(name)} (${esc(biggest.ticker)}) is ${verb} ${pctStr} today</div>
+            <div class="insight-sub">Trading at $${biggest.price.toFixed(2)}, range $${biggest.dayLow.toFixed(2)} to $${biggest.dayHigh.toFixed(2)}</div>
+            <div class="insight-cta">Tap to ask Trackr why &rarr;</div>
+          </div>`;
+        el.style.display = '';
+      } catch (err) {}
+    }
+
+    function openTrackrWith(question) {
+      const fab = document.getElementById('chatFab');
+      const panel = document.getElementById('chatPanel');
+      const input = document.getElementById('chatInput');
+      if (fab && panel && input) {
+        panel.classList.add('open');
+        fab.classList.add('open');
+        input.value = question;
+        input.focus();
+      }
     }
 
     async function loadPerfChart() {
