@@ -2398,6 +2398,36 @@ app.get('/api/watchlist-performance', requireAuth, async (req, res) => {
   }
 });
 
+// Stock peers (similar companies)
+app.get('/api/stock/:symbol/peers', requireAuth, async (req, res) => {
+  if (!process.env.FINNHUB_API_KEY) return res.status(500).json({ error: 'API key not configured' });
+  const symbol = req.params.symbol.toUpperCase();
+  const cached = newsCacheGet('peers:' + symbol);
+  if (cached) return res.json({ peers: cached });
+
+  try {
+    const peersRes = await fetch(`https://finnhub.io/api/v1/stock/peers?symbol=${symbol}&token=${process.env.FINNHUB_API_KEY}`);
+    const peerTickers = await peersRes.json();
+    if (!Array.isArray(peerTickers) || peerTickers.length === 0) {
+      return res.json({ peers: [] });
+    }
+
+    // Get quotes for the top 5 peers (excluding the stock itself)
+    const filtered = peerTickers.filter(t => t !== symbol).slice(0, 5);
+    const peers = [];
+    for (const ticker of filtered) {
+      const quote = await fetchQuote(ticker);
+      if (!quote.error) {
+        peers.push({ ticker, price: quote.price, changePercent: quote.changePercent });
+      }
+    }
+    newsCacheSet('peers:' + symbol, peers);
+    res.json({ peers });
+  } catch (err) {
+    res.json({ peers: [] });
+  }
+});
+
 // Stock screener: filter popular stocks by financial criteria
 const SCREENER_TICKERS = ['AAPL','MSFT','GOOGL','AMZN','NVDA','META','TSLA','BRK.B','JPM','JNJ','V','PG','UNH','HD','MA','DIS','PYPL','NFLX','ADBE','CRM','INTC','CSCO','PFE','PEP','KO','MRK','ABT','TMO','COST','NKE','LLY','ORCL','ACN','TXN','QCOM','AVGO','AMD','SBUX','MDT','BMY','AMGN','GS','BA','CAT','DE','AXP','CVX','XOM','SLB','WMT','LOW'];
 
