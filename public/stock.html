@@ -164,6 +164,20 @@
     .stock-change.down { color: var(--down); background: var(--down-bg); }
     .stock-change.flat { color: var(--ink-muted); background: var(--paper-sunken); }
 
+    .trackr-actions { margin: 12px 0 18px; }
+    .trackr-actions-label {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.12em; color: var(--ink-faint); margin-bottom: 8px;
+    }
+    .trackr-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .trackr-chip {
+      background: var(--paper-bright); border: 1px solid var(--rule-strong);
+      border-radius: 2px; padding: 6px 12px; font-size: 11px;
+      font-weight: 600; font-family: var(--font-ui); color: var(--ink-muted);
+      cursor: pointer;
+    }
+    .trackr-chip:hover { border-color: var(--green); color: var(--ink); background: var(--paper-raise); }
+
     /* chart */
     .chart-card {
       background: var(--paper-raise) linear-gradient(var(--margin-red), var(--margin-red)) no-repeat 15px 0 / 1px 100%;
@@ -486,6 +500,18 @@
 
       <div id="watchlistAction"></div>
 
+      <div class="trackr-actions">
+        <div class="trackr-actions-label">Ask Trackr</div>
+        <div class="trackr-chips">
+          <button class="trackr-chip" onclick="askTrackr('Give me a full analysis of ' + SYMBOL)">Analyze</button>
+          <button class="trackr-chip" onclick="askTrackr('What are the financials for ' + SYMBOL + '?')">Financials</button>
+          <button class="trackr-chip" onclick="askTrackr('Run a DCF on ' + SYMBOL)">DCF</button>
+          <button class="trackr-chip" onclick="askTrackr('Why is ' + SYMBOL + ' moving today?')">Why moving?</button>
+          <button class="trackr-chip" onclick="askTrackr('Compare ' + SYMBOL + ' with ')">Compare</button>
+          <button class="trackr-chip" onclick="askTrackr('Should I buy ' + SYMBOL + '?')">Should I buy?</button>
+        </div>
+      </div>
+
       <div id="chartArea">
         <div class="chart-card">
           <div class="chart-label">Price history</div>
@@ -534,6 +560,22 @@
     }
 
     AuthGuard.init(function () { initStockPage(); });
+
+    function askTrackr(question) {
+      var fab = document.getElementById('chatFab');
+      var panel = document.getElementById('chatPanel');
+      var input = document.getElementById('chatInput');
+      if (fab && panel && input) {
+        panel.classList.add('open');
+        fab.classList.add('open');
+        input.value = question;
+        input.focus();
+        // If the question ends with a space (like Compare), put cursor there for the user to type
+        if (question.endsWith(' ')) {
+          input.setSelectionRange(question.length, question.length);
+        }
+      }
+    }
 
     function esc(s) {
       const d = document.createElement('div');
