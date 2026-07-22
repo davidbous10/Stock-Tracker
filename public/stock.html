@@ -124,12 +124,32 @@
     .back-link:hover { color: var(--ink); }
 
     .stock-header {
-      background: var(--paper-raise) linear-gradient(var(--margin-red), var(--margin-red)) no-repeat 15px 0 / 1px 100%;
-      border: 1px solid var(--rule-strong); border-radius: 3px;
-      box-shadow: var(--shadow-paper);
-      padding: 22px 24px 22px 30px;
+      border-radius: 6px;
+      padding: 28px 28px 24px 32px;
       margin-bottom: 14px;
+      position: relative; overflow: hidden;
     }
+    .stock-header.up {
+      background: linear-gradient(135deg, #162B1E 0%, #1A3D24 50%, #1E4A2A 100%);
+      border: 1px solid #2A5A34;
+    }
+    .stock-header.down {
+      background: linear-gradient(135deg, #2B1618 0%, #3D1A1C 50%, #4A1E20 100%);
+      border: 1px solid #5A2A2E;
+    }
+    .stock-header.flat {
+      background: var(--paper-raise) linear-gradient(var(--margin-red), var(--margin-red)) no-repeat 15px 0 / 1px 100%;
+      border: 1px solid var(--rule-strong);
+      box-shadow: var(--shadow-paper);
+    }
+    .stock-header.up .stock-symbol,
+    .stock-header.up .stock-price,
+    .stock-header.down .stock-symbol,
+    .stock-header.down .stock-price { color: #F3EEDF; }
+    .stock-header.up .stock-name,
+    .stock-header.up .stock-industry { color: #B8CCBA; }
+    .stock-header.down .stock-name,
+    .stock-header.down .stock-industry { color: #CCBAB8; }
     .stock-header-top { display: flex; align-items: flex-start; gap: 16px; }
     .stock-logo { width: 48px; height: 48px; border-radius: 3px; border: 1px solid var(--rule); object-fit: contain; background: #fff; padding: 4px; flex-shrink: 0; }
     .stock-logo-fallback { width: 48px; height: 48px; border-radius: 3px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-family: var(--font-data); font-weight: 700; font-size: 20px; color: #F3EEDF; }
@@ -803,7 +823,7 @@
       })() : '';
 
       el.innerHTML = `
-        <div class="stock-header">
+        <div class="stock-header ${dir}">
           <div class="stock-header-top">
             ${logoHtml}
             <div class="stock-id">
