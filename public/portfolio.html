@@ -682,6 +682,14 @@
     }
     .port-empty a { color: var(--green); font-weight: 600; text-decoration: none; }
 
+    .alloc-wrap { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+    .alloc-chart { width: 140px; height: 140px; flex-shrink: 0; }
+    .alloc-legend { flex: 1; min-width: 150px; }
+    .alloc-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; }
+    .alloc-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+    .alloc-ticker { font-family: var(--font-data); font-weight: 700; min-width: 45px; }
+    .alloc-pct { font-family: var(--font-data); color: var(--ink-muted); margin-left: auto; }
+
     .port-badge {
       display: inline-block; padding: 3px 10px; border-radius: 2px;
       font-family: var(--font-data); font-size: 10px; font-weight: 700;
@@ -790,6 +798,11 @@
         <div class="acct-box"><div class="acct-label">Buying power</div><div class="acct-value" id="acctBP">-</div></div>
       </div>
 
+      <div id="allocChart" style="display:none">
+        <div class="section-label">Allocation</div>
+        <div id="allocArea"></div>
+      </div>
+
       <div class="section-label">Positions</div>
       <div id="positionsArea">
         <div class="port-empty">Loading...</div>
@@ -850,7 +863,56 @@
         });
         html += '</table>';
         el.innerHTML = html;
+
+        // Render allocation pie chart
+        renderAllocation(positions);
       } catch (err) { el.innerHTML = '<div class="port-empty">Could not load positions</div>'; }
+    }
+
+    function renderAllocation(positions) {
+      var chartEl = document.getElementById('allocChart');
+      var areaEl = document.getElementById('allocArea');
+      if (positions.length === 0) { chartEl.style.display = 'none'; return; }
+
+      var total = positions.reduce(function(s, p) { return s + p.marketValue; }, 0);
+      if (total === 0) return;
+
+      var colors = ['#C9A75C', '#3DDC97', '#5E8B7E', '#A67B5B', '#7A9EC2', '#D4856A', '#8B6DAF', '#5B8C5A'];
+
+      // Build SVG donut
+      var cx = 70, cy = 70, r = 55, r2 = 30;
+      var angle = -90;
+      var paths = '';
+      var legend = '';
+
+      positions.forEach(function(p, i) {
+        var pct = p.marketValue / total;
+        var sweep = pct * 360;
+        var color = colors[i % colors.length];
+
+        var startRad = angle * Math.PI / 180;
+        var endRad = (angle + sweep) * Math.PI / 180;
+
+        var x1 = cx + r * Math.cos(startRad);
+        var y1 = cy + r * Math.sin(startRad);
+        var x2 = cx + r * Math.cos(endRad);
+        var y2 = cy + r * Math.sin(endRad);
+        var x3 = cx + r2 * Math.cos(endRad);
+        var y3 = cy + r2 * Math.sin(endRad);
+        var x4 = cx + r2 * Math.cos(startRad);
+        var y4 = cy + r2 * Math.sin(startRad);
+
+        var largeArc = sweep > 180 ? 1 : 0;
+
+        paths += '<path d="M ' + x1.toFixed(1) + ' ' + y1.toFixed(1) + ' A ' + r + ' ' + r + ' 0 ' + largeArc + ' 1 ' + x2.toFixed(1) + ' ' + y2.toFixed(1) + ' L ' + x3.toFixed(1) + ' ' + y3.toFixed(1) + ' A ' + r2 + ' ' + r2 + ' 0 ' + largeArc + ' 0 ' + x4.toFixed(1) + ' ' + y4.toFixed(1) + ' Z" fill="' + color + '"/>';
+
+        legend += '<div class="alloc-item"><div class="alloc-dot" style="background:' + color + '"></div><span class="alloc-ticker">' + p.ticker + '</span><span class="alloc-pct">' + (pct * 100).toFixed(1) + '%</span></div>';
+
+        angle += sweep;
+      });
+
+      areaEl.innerHTML = '<div class="alloc-wrap"><svg class="alloc-chart" viewBox="0 0 140 140">' + paths + '</svg><div class="alloc-legend">' + legend + '</div></div>';
+      chartEl.style.display = '';
     }
 
     async function loadOrders() {
