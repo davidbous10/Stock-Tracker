@@ -406,6 +406,35 @@
     document.documentElement.classList.add('dark');
   }
 
+  // Price flash animation CSS
+  var flashStyle = document.createElement('style');
+  flashStyle.textContent = `
+    @keyframes priceFlashUp { 0% { color: var(--up); } 100% { color: inherit; } }
+    @keyframes priceFlashDown { 0% { color: var(--down); } 100% { color: inherit; } }
+    .price-flash-up { animation: priceFlashUp 1.2s ease-out; }
+    .price-flash-down { animation: priceFlashDown 1.2s ease-out; }
+  `;
+  document.head.appendChild(flashStyle);
+
+  // Observe price changes and flash them
+  var lastPrices = {};
+  setInterval(function () {
+    document.querySelectorAll('[data-ticker]').forEach(function (card) {
+      var ticker = card.dataset.ticker;
+      var priceEl = card.querySelector('.price');
+      if (!priceEl) return;
+      var text = priceEl.textContent.replace(/[$,]/g, '');
+      var val = parseFloat(text);
+      if (isNaN(val)) return;
+      if (lastPrices[ticker] !== undefined && lastPrices[ticker] !== val) {
+        priceEl.classList.remove('price-flash-up', 'price-flash-down');
+        void priceEl.offsetWidth; // force reflow
+        priceEl.classList.add(val > lastPrices[ticker] ? 'price-flash-up' : 'price-flash-down');
+      }
+      lastPrices[ticker] = val;
+    });
+  }, 2000);
+
   // Global toggle function (called from settings page)
   window.toggleDarkMode = function () {
     var isDark = document.documentElement.classList.toggle('dark');
