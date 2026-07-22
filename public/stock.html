@@ -178,6 +178,21 @@
     }
     .trackr-chip:hover { border-color: var(--green); color: var(--ink); background: var(--paper-raise); }
 
+    .peers-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .peer-card {
+      flex: 1; min-width: 100px;
+      background: var(--paper-raise); border: 1px solid var(--rule-strong);
+      border-radius: 3px; padding: 12px 14px;
+      text-decoration: none; color: inherit;
+    }
+    .peer-card:hover { border-color: var(--brass-soft); }
+    .peer-ticker { font-family: var(--font-data); font-size: 14px; font-weight: 700; }
+    .peer-price { font-family: var(--font-data); font-size: 13px; margin-top: 4px; }
+    .peer-change { font-family: var(--font-data); font-size: 11px; font-weight: 700; margin-top: 2px; }
+    .peer-change.up { color: var(--up); }
+    .peer-change.down { color: var(--down); }
+    .peers-empty { font-size: 12px; color: var(--ink-faint); font-style: italic; }
+
     /* chart */
     .chart-card {
       background: var(--paper-raise) linear-gradient(var(--margin-red), var(--margin-red)) no-repeat 15px 0 / 1px 100%;
@@ -535,8 +550,11 @@
         <div class="skeleton skel-line" style="width:75%;height:14px"></div>
       </div>
 
+      <div class="section-label">Similar companies</div>
+      <div id="peersArea"></div>
+
       <div id="tradeSection" style="display:none">
-        <div class="section-label">Trade</div>
+        <div class="section-label" id="tradeAnchor">Trade</div>
         <div class="trade-buttons" id="tradeButtons"></div>
         <div id="paperTradeArea"></div>
       </div>
@@ -632,9 +650,32 @@
       loadAnalysis();
       checkWatchlist();
       renderTradeButtons();
+      loadPeers();
+
+      if (window.location.hash === '#trade') {
+        setTimeout(function() {
+          var el = document.getElementById('tradeAnchor');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }, 500);
+      }
 
       // Auto-refresh price every 30 seconds (same as watchlist)
       setInterval(loadQuote, 30000);
+    }
+
+    async function loadPeers() {
+      var el = document.getElementById('peersArea');
+      try {
+        var res = await AuthGuard.fetch('/api/stock/' + encodeURIComponent(SYMBOL) + '/peers');
+        var data = await res.json();
+        var peers = data.peers || [];
+        if (peers.length === 0) { el.innerHTML = '<div class="peers-empty">No peer data available</div>'; return; }
+        el.innerHTML = '<div class="peers-row">' + peers.map(function(p) {
+          var dir = p.changePercent > 0 ? 'up' : p.changePercent < 0 ? 'down' : '';
+          var pctStr = p.changePercent > 0 ? '+' + p.changePercent.toFixed(2) + '%' : '(' + Math.abs(p.changePercent).toFixed(2) + '%)';
+          return '<a href="/stock.html?t=' + encodeURIComponent(p.ticker) + '" class="peer-card"><div class="peer-ticker">' + esc(p.ticker) + '</div><div class="peer-price">$' + p.price.toFixed(2) + '</div><div class="peer-change ' + dir + '">' + pctStr + '</div></a>';
+        }).join('') + '</div>';
+      } catch (err) { el.innerHTML = '<div class="peers-empty">Could not load peers</div>'; }
     }
 
     async function renderTradeButtons() {
