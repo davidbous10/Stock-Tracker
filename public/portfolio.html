@@ -776,7 +776,10 @@
           <div class="page-title">Portfolio</div>
           <div class="page-subtitle">Paper trading account</div>
         </div>
-        <button class="refresh-btn" onclick="loadAll()">Refresh</button>
+        <div style="display:flex;gap:6px">
+          <button class="refresh-btn" onclick="loadAll()">Refresh</button>
+          <a href="/api/export/trades" class="refresh-btn" style="text-decoration:none;text-align:center">↓ Export trades</a>
+        </div>
       </div>
 
       <div class="port-badge">Paper trading (practice money)</div>
