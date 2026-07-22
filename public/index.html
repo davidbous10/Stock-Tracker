@@ -557,6 +557,20 @@
     .market-status.open .market-status-dot { background: var(--up); }
     .market-status.closed .market-status-dot { background: var(--down); }
     .market-status.premarket .market-status-dot { background: var(--brass); }
+
+    .quick-stats {
+      display: flex; gap: 16px; flex-wrap: wrap;
+      margin-bottom: 18px; padding: 14px 20px;
+      background: var(--paper-raise); border: 1px solid var(--rule-strong);
+      border-radius: 3px; box-shadow: var(--shadow-paper);
+      font-family: var(--font-data); font-size: 13px;
+    }
+    .qs-item { display: flex; align-items: center; gap: 6px; }
+    .qs-label { color: var(--ink-faint); font-size: 11px; }
+    .qs-value { font-weight: 700; }
+    .qs-value.up { color: var(--up); }
+    .qs-value.down { color: var(--down); }
+    .qs-divider { width: 1px; background: var(--rule-strong); align-self: stretch; }
     .cta-watchlist:hover { background: var(--green-bright); }
 
     .skel-pulse-card {
@@ -771,6 +785,8 @@
       <div class="skel-pulse-card"><div class="skeleton skel-line" style="width:50%"></div><div class="skeleton skel-line" style="width:70%;height:18px"></div></div>
     </div>
 
+    <div id="quickStats" style="display:none"></div>
+
     <div class="section-label">Today's movers</div>
     <div id="moverSpotlight">
       <div class="mover-grid">
@@ -915,6 +931,28 @@
         });
 
         if (!biggest || biggestAbs < 1) return;
+
+        // Quick stats bar
+        const qsEl = document.getElementById('quickStats');
+        let upCount = 0, downCount = 0, totalChange = 0;
+        quotes.forEach(q => {
+          if (q.error || q.changePercent == null || q.price == null) return;
+          if (q.changePercent > 0) upCount++;
+          else if (q.changePercent < 0) downCount++;
+          totalChange += (q.change || 0);
+        });
+        const totalDir = totalChange >= 0 ? 'up' : 'down';
+        const totalStr = totalChange >= 0 ? '+$' + totalChange.toFixed(2) : '($' + Math.abs(totalChange).toFixed(2) + ')';
+        qsEl.innerHTML = `<div class="quick-stats">
+          <div class="qs-item"><span class="qs-label">Watching</span><span class="qs-value">${items.length}</span></div>
+          <div class="qs-divider"></div>
+          <div class="qs-item"><span class="qs-label">Up</span><span class="qs-value up">${upCount}</span></div>
+          <div class="qs-divider"></div>
+          <div class="qs-item"><span class="qs-label">Down</span><span class="qs-value down">${downCount}</span></div>
+          <div class="qs-divider"></div>
+          <div class="qs-item"><span class="qs-label">Avg move</span><span class="qs-value ${totalDir}">${totalStr}</span></div>
+        </div>`;
+        qsEl.style.display = '';
 
         const item = items.find(i => i.ticker === biggest.ticker);
         const name = item && item.name ? item.name : biggest.ticker;
