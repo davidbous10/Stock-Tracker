@@ -81,12 +81,38 @@ const AuthGuard = (function () {
     }
   }
 
-  async function authFetch(url, options) {
-    const res = await fetch(url, options);
-    if (res.status === 401) {
-      showLogin('Your session expired. Please log in again.');
+  async function authFetch(url, options, retries) {
+    retries = retries || 0;
+    try {
+      const res = await fetch(url, options);
+      if (res.status === 401) {
+        showLogin('Your session expired. Please log in again.');
+      }
+      // Hide any reconnecting indicator on success
+      hideReconnecting();
+      return res;
+    } catch (err) {
+      // Network error - retry up to 3 times with backoff
+      if (retries < 3) {
+        showReconnecting();
+        await new Promise(r => setTimeout(r, (retries + 1) * 1500));
+        return authFetch(url, options, retries + 1);
+      }
+      throw err;
     }
-    return res;
+  }
+
+  var reconnectEl = null;
+  function showReconnecting() {
+    if (reconnectEl) return;
+    reconnectEl = document.createElement('div');
+    reconnectEl.id = 'reconnectBanner';
+    reconnectEl.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#C9A75C;color:#23281F;text-align:center;padding:6px;font-size:12px;font-weight:600;font-family:Archivo,system-ui,sans-serif;z-index:300';
+    reconnectEl.textContent = 'Reconnecting to server...';
+    document.body.appendChild(reconnectEl);
+  }
+  function hideReconnecting() {
+    if (reconnectEl) { reconnectEl.remove(); reconnectEl = null; }
   }
 
   function wireAuthForm() {
