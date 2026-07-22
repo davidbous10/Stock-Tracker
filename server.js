@@ -2398,6 +2398,48 @@ app.get('/api/watchlist-performance', requireAuth, async (req, res) => {
   }
 });
 
+// Stock screener: filter popular stocks by financial criteria
+const SCREENER_TICKERS = ['AAPL','MSFT','GOOGL','AMZN','NVDA','META','TSLA','BRK.B','JPM','JNJ','V','PG','UNH','HD','MA','DIS','PYPL','NFLX','ADBE','CRM','INTC','CSCO','PFE','PEP','KO','MRK','ABT','TMO','COST','NKE','LLY','ORCL','ACN','TXN','QCOM','AVGO','AMD','SBUX','MDT','BMY','AMGN','GS','BA','CAT','DE','AXP','CVX','XOM','SLB','WMT','LOW'];
+
+app.get('/api/screener', requireAuth, async (req, res) => {
+  if (!process.env.FINNHUB_API_KEY) return res.status(500).json({ error: 'API key not configured' });
+
+  const cached = newsCacheGet('screener');
+  if (cached) return res.json({ stocks: cached });
+
+  try {
+    const results = [];
+    for (const ticker of SCREENER_TICKERS) {
+      try {
+        const [quote, metricRes] = await Promise.all([
+          fetchQuote(ticker),
+          fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${ticker}&metric=all&token=${process.env.FINNHUB_API_KEY}`).then(r => r.json()),
+        ]);
+        const m = metricRes.metric || {};
+        if (quote.error) continue;
+        results.push({
+          ticker,
+          price: quote.price,
+          changePercent: quote.changePercent,
+          marketCap: m.marketCapitalization || null,
+          pe: m.peNormalizedAnnual || m.peTTM || null,
+          eps: m.epsNormalizedAnnual || null,
+          dividendYield: m.dividendYieldIndicatedAnnual || null,
+          revenueGrowth: m.revenueGrowth3Y || null,
+          profitMargin: m.netProfitMarginTTM || null,
+          beta: m.beta || null,
+          weekHigh52: m['52WeekHigh'] || null,
+          weekLow52: m['52WeekLow'] || null,
+        });
+      } catch (e) {}
+    }
+    newsCacheSet('screener', results);
+    res.json({ stocks: results });
+  } catch (err) {
+    res.status(500).json({ error: 'Screener failed' });
+  }
+});
+
 // CSV exports
 app.get('/api/export/watchlist', requireAuth, async (req, res) => {
   if (!requireDb(res)) return;
@@ -2693,3 +2735,9 @@ initDb();
 
 setTimeout(runScheduledChecks, 8000);
 setInterval(runScheduledChecks, SNAPSHOT_INTERVAL_MS);
+
+// Keep-alive: ping own health endpoint every 10 minutes to prevent
+// Railway free tier from putting the server to sleep.
+setInterval(() => {
+  fetch(`http://localhost:${PORT}/api/health`).catch(() => {});
+}, 10 * 60 * 1000);
