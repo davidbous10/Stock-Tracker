@@ -2396,6 +2396,53 @@ app.get('/api/watchlist-performance', requireAuth, async (req, res) => {
   }
 });
 
+// CSV exports
+app.get('/api/export/watchlist', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  try {
+    const items = await getAllWatchlistItems(req.session.userId);
+    const quotes = await Promise.all(items.map(i => fetchQuote(i.ticker)));
+    
+    let csv = 'Ticker,Company,Category,Price,Change %,Day Low,Day High\n';
+    items.forEach((item, idx) => {
+      const q = quotes[idx];
+      const price = q && !q.error ? q.price.toFixed(2) : '';
+      const pct = q && !q.error ? q.changePercent.toFixed(2) : '';
+      const lo = q && !q.error && q.dayLow ? q.dayLow.toFixed(2) : '';
+      const hi = q && !q.error && q.dayHigh ? q.dayHigh.toFixed(2) : '';
+      csv += `${item.ticker},"${(item.name || '').replace(/"/g, '""')}",${item.category || ''},${price},${pct},${lo},${hi}\n`;
+    });
+    
+    res.set('Content-Type', 'text/csv');
+    res.set('Content-Disposition', 'attachment; filename="tradetrack-watchlist.csv"');
+    res.send(csv);
+  } catch (err) {
+    res.status(500).json({ error: 'Export failed' });
+  }
+});
+
+app.get('/api/export/trades', requireAuth, async (req, res) => {
+  if (!tradingEnabled()) return res.status(500).json({ error: 'Trading not configured' });
+  try {
+    const r = await fetch(`${ALPACA_BASE}/v2/orders?status=all&limit=100&direction=desc`, { headers: alpacaHeaders() });
+    const data = await r.json();
+    if (!r.ok) return res.status(500).json({ error: 'Could not fetch trades' });
+    
+    let csv = 'Date,Symbol,Side,Quantity,Status,Fill Price,Type\n';
+    data.forEach(o => {
+      const date = o.filled_at || o.submitted_at || '';
+      const fillPrice = o.filled_avg_price || '';
+      csv += `${date},${o.symbol},${o.side},${o.qty},${o.status},${fillPrice},${o.type}\n`;
+    });
+    
+    res.set('Content-Type', 'text/csv');
+    res.set('Content-Disposition', 'attachment; filename="tradetrack-trades.csv"');
+    res.send(csv);
+  } catch (err) {
+    res.status(500).json({ error: 'Export failed' });
+  }
+});
+
 // Referral URLs (read from environment variables)
 app.get('/api/referral-urls', requireAuth, (req, res) => {
   res.json({
