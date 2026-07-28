@@ -843,9 +843,15 @@
 
     function greetingByHour() {
       const h = new Date().getHours();
-      if (h < 12) return 'Good morning';
-      if (h < 18) return 'Good afternoon';
-      return 'Good evening';
+      const mornings = ['Good morning', 'Rise and grind', 'Morning'];
+      const afternoons = ['Good afternoon', 'What\'s moving', 'Let\'s check in'];
+      const evenings = ['Good evening', 'After hours', 'Evening'];
+
+      const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+      if (h < 12) return pick(mornings);
+      if (h < 18) return pick(afternoons);
+      return pick(evenings);
     }
 
     function initHomePage(email, name) {
@@ -966,11 +972,11 @@
 
         // Overall sentiment
         if (upCount > downCount) {
-          briefingLines.push(`<div class="brief-line"><span class="brief-dot up"></span>Most of your watchlist is green today. ${upCount} up, ${downCount} down.</div>`);
+          briefingLines.push(`<div class="brief-line"><span class="brief-dot up"></span>Good vibes today. ${upCount} of your stocks are green, ${downCount} red.</div>`);
         } else if (downCount > upCount) {
-          briefingLines.push(`<div class="brief-line"><span class="brief-dot down"></span>Rough day for your watchlist. ${downCount} down, ${upCount} up.</div>`);
+          briefingLines.push(`<div class="brief-line"><span class="brief-dot down"></span>Heads up, ${downCount} of your stocks are in the red today. ${upCount} holding green.</div>`);
         } else {
-          briefingLines.push(`<div class="brief-line"><span class="brief-dot flat"></span>Your watchlist is mixed today. ${upCount} up, ${downCount} down.</div>`);
+          briefingLines.push(`<div class="brief-line"><span class="brief-dot flat"></span>Mixed signals today. ${upCount} green, ${downCount} red. Could go either way.</div>`);
         }
 
         // Biggest mover
@@ -981,7 +987,10 @@
           const pctStr = biggest.changePercent > 0
             ? `+${biggest.changePercent.toFixed(2)}%`
             : `(${Math.abs(biggest.changePercent).toFixed(2)}%)`;
-          briefingLines.push(`<div class="brief-line"><span class="brief-dot ${verb}"></span><strong>${biggest.ticker}</strong> is your biggest mover, ${verb} ${pctStr} at $${biggest.price.toFixed(2)}</div>`);
+          const commentary = biggest.changePercent > 0
+            ? 'leading the pack'
+            : 'taking the biggest hit';
+          briefingLines.push(`<div class="brief-line"><span class="brief-dot ${verb}"></span><strong>${biggest.ticker}</strong> is ${commentary}, ${verb} ${pctStr} at $${biggest.price.toFixed(2)}</div>`);
         }
 
         // Upcoming earnings
@@ -990,7 +999,7 @@
           const d = new Date(next.date);
           const daysAway = Math.ceil((d - new Date()) / (1000 * 60 * 60 * 24));
           const when = daysAway === 0 ? 'today' : daysAway === 1 ? 'tomorrow' : `in ${daysAway} days`;
-          briefingLines.push(`<div class="brief-line"><span class="brief-dot earn"></span><strong>${next.ticker}</strong> reports earnings ${when}</div>`);
+          briefingLines.push(`<div class="brief-line"><span class="brief-dot earn"></span>Earnings alert: <strong>${next.ticker}</strong> reports ${when}. Might want to keep an eye on it.</div>`);
         }
 
         if (briefingLines.length === 0) return;
