@@ -544,6 +544,15 @@
     .insight-sub { font-size: 12px; color: var(--ink-muted); margin-top: 6px; }
     .insight-cta { font-size: 11px; color: var(--green-bright); font-weight: 600; margin-top: 8px; }
 
+    .brief-line { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.5; margin-bottom: 6px; }
+    .brief-line:last-of-type { margin-bottom: 0; }
+    .brief-line strong { font-weight: 700; }
+    .brief-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 6px; }
+    .brief-dot.up { background: var(--up); }
+    .brief-dot.down { background: var(--down); }
+    .brief-dot.flat { background: var(--ink-faint); }
+    .brief-dot.earn { background: var(--brass); }
+
     .market-status {
       display: inline-flex; align-items: center; gap: 6px;
       margin-top: 8px; padding: 4px 12px;
@@ -911,36 +920,34 @@
     async function loadInsight() {
       const el = document.getElementById('insightCard');
       try {
-        const [wlRes, pricesRes] = await Promise.all([
+        const [wlRes, pricesRes, earnRes] = await Promise.all([
           AuthGuard.fetch('/api/watchlist'),
           AuthGuard.fetch('/api/prices'),
+          AuthGuard.fetch('/api/earnings-calendar').catch(() => ({ json: () => ({ earnings: { upcoming: [] } }) })),
         ]);
         const wlData = await wlRes.json();
         const pricesData = await pricesRes.json();
+        const earnData = await earnRes.json();
         const items = wlData.items || [];
         const quotes = pricesData.quotes || [];
+        const upcoming = (earnData.earnings && earnData.earnings.upcoming) || [];
 
         if (items.length === 0 || quotes.length === 0) return;
 
-        let biggest = null;
-        let biggestAbs = 0;
+        // Calculate stats
+        let biggest = null, biggestAbs = 0;
+        let upCount = 0, downCount = 0, totalChange = 0;
         quotes.forEach(q => {
           if (q.error || q.changePercent == null) return;
           const abs = Math.abs(q.changePercent);
           if (abs > biggestAbs) { biggestAbs = abs; biggest = q; }
-        });
-
-        if (!biggest || biggestAbs < 1) return;
-
-        // Quick stats bar
-        const qsEl = document.getElementById('quickStats');
-        let upCount = 0, downCount = 0, totalChange = 0;
-        quotes.forEach(q => {
-          if (q.error || q.changePercent == null || q.price == null) return;
           if (q.changePercent > 0) upCount++;
           else if (q.changePercent < 0) downCount++;
           totalChange += (q.change || 0);
         });
+
+        // Quick stats bar
+        const qsEl = document.getElementById('quickStats');
         const totalDir = totalChange >= 0 ? 'up' : 'down';
         const totalStr = totalChange >= 0 ? '+$' + totalChange.toFixed(2) : '($' + Math.abs(totalChange).toFixed(2) + ')';
         qsEl.innerHTML = `<div class="quick-stats">
@@ -954,26 +961,50 @@
         </div>`;
         qsEl.style.display = '';
 
-        const item = items.find(i => i.ticker === biggest.ticker);
-        const name = item && item.name ? item.name : biggest.ticker;
-        const dir = biggest.changePercent > 0 ? 'up' : 'down';
-        const pctStr = biggest.changePercent > 0
-          ? `+${biggest.changePercent.toFixed(2)}%`
-          : `(${Math.abs(biggest.changePercent).toFixed(2)}%)`;
-        const verb = biggest.changePercent > 0 ? 'up' : 'down';
-        const question = biggest.changePercent > 0
-          ? `Why is ${biggest.ticker} up today?`
-          : `Why is ${biggest.ticker} down today?`;
+        // Build briefing card
+        let briefingLines = [];
+
+        // Overall sentiment
+        if (upCount > downCount) {
+          briefingLines.push(`<div class="brief-line"><span class="brief-dot up"></span>Most of your watchlist is green today. ${upCount} up, ${downCount} down.</div>`);
+        } else if (downCount > upCount) {
+          briefingLines.push(`<div class="brief-line"><span class="brief-dot down"></span>Rough day for your watchlist. ${downCount} down, ${upCount} up.</div>`);
+        } else {
+          briefingLines.push(`<div class="brief-line"><span class="brief-dot flat"></span>Your watchlist is mixed today. ${upCount} up, ${downCount} down.</div>`);
+        }
+
+        // Biggest mover
+        if (biggest && biggestAbs >= 0.5) {
+          const item = items.find(i => i.ticker === biggest.ticker);
+          const name = item && item.name ? item.name : biggest.ticker;
+          const verb = biggest.changePercent > 0 ? 'up' : 'down';
+          const pctStr = biggest.changePercent > 0
+            ? `+${biggest.changePercent.toFixed(2)}%`
+            : `(${Math.abs(biggest.changePercent).toFixed(2)}%)`;
+          briefingLines.push(`<div class="brief-line"><span class="brief-dot ${verb}"></span><strong>${biggest.ticker}</strong> is your biggest mover, ${verb} ${pctStr} at $${biggest.price.toFixed(2)}</div>`);
+        }
+
+        // Upcoming earnings
+        if (upcoming.length > 0) {
+          const next = upcoming[0];
+          const d = new Date(next.date);
+          const daysAway = Math.ceil((d - new Date()) / (1000 * 60 * 60 * 24));
+          const when = daysAway === 0 ? 'today' : daysAway === 1 ? 'tomorrow' : `in ${daysAway} days`;
+          briefingLines.push(`<div class="brief-line"><span class="brief-dot earn"></span><strong>${next.ticker}</strong> reports earnings ${when}</div>`);
+        }
+
+        if (briefingLines.length === 0) return;
+
+        const question = biggest ? (biggest.changePercent > 0 ? `Why is ${biggest.ticker} up today?` : `Why is ${biggest.ticker} down today?`) : 'How is my watchlist doing?';
 
         el.innerHTML = `
           <div class="insight-card" onclick="openTrackrWith('${question}')">
             <div class="insight-header">
-              <div class="insight-dot ${dir}"></div>
-              <div class="insight-label">Trackr insight</div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="4" y="14" width="4" height="7" rx="1" fill="#C9A75C" opacity="0.6"/><rect x="10" y="10" width="4" height="11" rx="1" fill="#C9A75C" opacity="0.8"/><rect x="16" y="5" width="4" height="16" rx="1" fill="#C9A75C"/></svg>
+              <div class="insight-label">Trackr briefing</div>
             </div>
-            <div class="insight-body">${esc(name)} (${esc(biggest.ticker)}) is ${verb} ${pctStr} today</div>
-            <div class="insight-sub">Trading at $${biggest.price.toFixed(2)}, range $${biggest.dayLow.toFixed(2)} to $${biggest.dayHigh.toFixed(2)}</div>
-            <div class="insight-cta">Tap to ask Trackr why &rarr;</div>
+            ${briefingLines.join('')}
+            <div class="insight-cta">Tap to ask Trackr more &rarr;</div>
           </div>`;
         el.style.display = '';
       } catch (err) {}
