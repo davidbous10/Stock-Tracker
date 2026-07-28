@@ -195,7 +195,7 @@
   fab.className = 'chat-fab';
   fab.id = 'chatFab';
   fab.title = 'Trackr';
-  fab.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4,4 L20,4 L20,7 L15,7 L15,20 L9,20 L9,7 L4,7 Z" fill="#C9A75C"/><line x1="17" y1="6" x2="21" y2="2" stroke="#3DDC97" stroke-width="2" stroke-linecap="round"/></svg>';
+  fab.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4,4 L20,4 L20,7 L15,7 L15,20 L9,20 L9,7 L4,7 Z" fill="#C9A75C"/></svg>';
 
   document.body.appendChild(panel);
   document.body.appendChild(fab);
