@@ -406,7 +406,167 @@
     document.documentElement.classList.add('dark');
   }
 
-  // Price flash animation CSS
+  // Animations and interactive feel
+  var animStyle = document.createElement('style');
+  animStyle.textContent = `
+    /* Card slide-up animation */
+    @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    .card, .sector-row, .pos-table tr, .earn-item, .news-card, .featured-card,
+    .stat-box, .acct-box, .insight-card, .perf-card, .peer-card, .compare-card,
+    .summary-pill, .ticker-group, .saved-item, .admin-table tr {
+      animation: slideUp 0.35s ease-out both;
+    }
+    .card:nth-child(1), .sector-row:nth-child(2) { animation-delay: 0s; }
+    .card:nth-child(2), .sector-row:nth-child(3) { animation-delay: 0.04s; }
+    .card:nth-child(3), .sector-row:nth-child(4) { animation-delay: 0.08s; }
+    .card:nth-child(4), .sector-row:nth-child(5) { animation-delay: 0.12s; }
+    .card:nth-child(5), .sector-row:nth-child(6) { animation-delay: 0.16s; }
+    .card:nth-child(6) { animation-delay: 0.2s; }
+    .card:nth-child(7) { animation-delay: 0.24s; }
+    .card:nth-child(8) { animation-delay: 0.28s; }
+    .card:nth-child(n+9) { animation-delay: 0.32s; }
+
+    /* Hover lift on cards */
+    .card, .peer-card, .sector-row, .earn-item, .insight-card, .compare-card,
+    .stat-box, .acct-box, .summary-pill, .perf-card {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .card:hover, .insight-card:hover, .compare-card:hover, .perf-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 16px rgba(35,40,31,0.12);
+    }
+    .peer-card:hover { transform: translateY(-2px); }
+    .stat-box:hover, .acct-box:hover, .summary-pill:hover {
+      transform: translateY(-1px);
+    }
+
+    /* Mobile touch feedback */
+    @media (max-width: 800px) {
+      .card:active, .peer-card:active, .sector-row:active, .earn-item:active,
+      .insight-card:active, .trade-btn:active, .trackr-chip:active,
+      .btn-watchlist:active, .cat-btn:active, .tab-link:active {
+        transform: scale(0.97);
+        transition: transform 0.1s ease;
+      }
+      .card:hover, .insight-card:hover, .compare-card:hover, .perf-card:hover {
+        transform: none;
+        box-shadow: none;
+      }
+    }
+
+    /* Smooth transitions on all interactive elements */
+    a, button, .tab-link, .side-nav-link, .trade-btn, .trackr-chip,
+    .cat-btn, .view-toggle, .log-filter, .filter-btn, .refresh-btn,
+    .btn-watchlist, .btn-onboard, .chat-suggestion, .chat-send {
+      transition: all 0.15s ease;
+    }
+
+    /* Fade in for main content */
+    .main-content { animation: fadeIn 0.3s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* Price count-up class */
+    .count-up { transition: color 0.3s ease; }
+
+    /* Smooth page background transitions for dark mode */
+    html { transition: background-color 0.3s ease; }
+    body { transition: background-color 0.3s ease, color 0.3s ease; }
+    .sidebar { transition: background-color 0.3s ease; }
+
+    /* Bottom tab bar smooth transitions */
+    .tab-link svg { transition: stroke 0.2s ease; }
+    .tab-link { transition: color 0.2s ease; }
+
+    /* Toast notification for copy actions */
+    .toast {
+      position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+      background: #23281F; color: #F3EEDF; padding: 8px 20px;
+      border-radius: 4px; font-size: 12px; font-weight: 600;
+      font-family: 'Archivo', system-ui, sans-serif;
+      z-index: 300; opacity: 0; transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; }
+
+    /* Greeting text animation */
+    .greeting-text { animation: slideUp 0.4s ease-out; }
+    .greeting-date { animation: slideUp 0.4s ease-out 0.1s both; }
+    .market-status { animation: slideUp 0.4s ease-out 0.15s both; }
+
+    /* Chat panel slide up */
+    .chat-panel { transition: transform 0.25s ease, opacity 0.25s ease; transform: translateY(20px); opacity: 0; }
+    .chat-panel.open { transform: translateY(0); opacity: 1; }
+
+    /* Notification dropdown slide */
+    .notif-dropdown { transition: transform 0.2s ease, opacity 0.2s ease; transform: translateY(8px); opacity: 0; }
+    .notif-dropdown.open { transform: translateY(0); opacity: 1; }
+
+    /* Pulse on the market status dot */
+    .market-status-dot { animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  `;
+  document.head.appendChild(animStyle);
+
+  // Count-up animation for numbers
+  function animateCountUp(el, target, prefix, suffix, duration) {
+    prefix = prefix || '';
+    suffix = suffix || '';
+    duration = duration || 800;
+    var start = 0;
+    var startTime = null;
+    function step(time) {
+      if (!startTime) startTime = time;
+      var progress = Math.min((time - startTime) / duration, 1);
+      var eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+      var current = start + (target - start) * eased;
+      el.textContent = prefix + current.toFixed(2) + suffix;
+      if (progress < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  // Observe new price elements and animate them
+  var countUpObserver = new MutationObserver(function (mutations) {
+    mutations.forEach(function (m) {
+      m.addedNodes.forEach(function (node) {
+        if (node.nodeType !== 1) return;
+        // Find stat box values and animate them
+        var statVals = node.querySelectorAll ? node.querySelectorAll('.stat-box-value, .acct-value') : [];
+        statVals.forEach(function (el) {
+          var text = el.textContent.replace(/[$,%]/g, '');
+          var num = parseFloat(text);
+          if (!isNaN(num) && num > 0 && num < 1000000) {
+            var prefix = el.textContent.includes('$') ? '$' : '';
+            var suffix = el.textContent.includes('%') ? '%' : '';
+            animateCountUp(el, num, prefix, suffix, 600);
+          }
+        });
+      });
+    });
+  });
+  countUpObserver.observe(document.body, { childList: true, subtree: true });
+
+  // Toast utility
+  window.showToast = function (msg) {
+    var existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+    var t = document.createElement('div');
+    t.className = 'toast';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function () { t.classList.add('show'); }, 10);
+    setTimeout(function () { t.classList.remove('show'); setTimeout(function () { t.remove(); }, 300); }, 2000);
+  };
+
+  // Click to copy price on watchlist
+  document.addEventListener('click', function (e) {
+    var priceEl = e.target.closest('.price');
+    if (priceEl && priceEl.closest('.card')) {
+      navigator.clipboard.writeText(priceEl.textContent).then(function () {
+        showToast('Copied ' + priceEl.textContent);
+      }).catch(function () {});
+    }
+  });
   var flashStyle = document.createElement('style');
   flashStyle.textContent = `
     @keyframes priceFlashUp { 0% { color: var(--up); } 100% { color: inherit; } }
