@@ -379,6 +379,22 @@
     }
     .settings-section .section-desc { font-size: 12px; color: var(--ink-muted); margin-bottom: 16px; }
 
+    .theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+    .theme-card {
+      border: 2px solid var(--rule-strong); border-radius: 6px; padding: 14px;
+      cursor: pointer; transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+    .theme-card:hover { transform: translateY(-1px); }
+    .theme-card.active { border-color: var(--brass); }
+    .theme-card-preview {
+      height: 48px; border-radius: 4px; margin-bottom: 10px;
+      display: flex; align-items: flex-end; padding: 6px 8px; gap: 3px; overflow: hidden;
+    }
+    .theme-card-bar { width: 8px; border-radius: 2px 2px 0 0; }
+    .theme-card-name { font-family: var(--font-ui); font-size: 13px; font-weight: 600; }
+    .theme-card-desc { font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
+    @media (max-width: 480px) { .theme-grid { grid-template-columns: 1fr; } }
+
     .settings-row {
       display: flex;
       justify-content: space-between;
@@ -590,11 +606,8 @@
 
       <div class="settings-section">
         <h2>Appearance</h2>
-        <div class="section-desc">Customize how Trade Track looks</div>
-        <div class="settings-row">
-          <span class="label">Dark mode</span>
-          <button class="btn-settings-submit" id="darkToggle" onclick="handleDarkToggle()" style="min-width:100px">Enable</button>
-        </div>
+        <div class="section-desc">Choose a theme for Trade Track</div>
+        <div class="theme-grid" id="themeGrid"></div>
       </div>
 
       <div class="settings-section">
@@ -877,26 +890,35 @@
       toggleEl.disabled = false;
     }
 
-    // Dark mode toggle
-    function updateDarkButton() {
-      var btn = document.getElementById('darkToggle');
-      var isDark = document.documentElement.classList.contains('dark');
-      btn.textContent = isDark ? 'Disable' : 'Enable';
-      if (isDark) {
-        btn.style.background = 'transparent';
-        btn.style.color = 'var(--ink-muted)';
-        btn.style.border = '1px solid var(--rule-strong)';
-      } else {
-        btn.style.background = '';
-        btn.style.color = '';
-        btn.style.border = '';
-      }
+    // Theme picker
+    var themeData = [
+      { id: 'ledger', name: 'The Ledger', desc: 'Cream paper, banker\'s green, brass accents', bg: '#F3EEDF', sidebar: '#17442F', bars: ['#C6BEA2','#A97F2F','#17442F','#C9A75C'] },
+      { id: 'midnight', name: 'Midnight', desc: 'Dark navy, electric blue, modern', bg: '#0C111B', sidebar: '#080D16', bars: ['#2A3A5C','#1A3A6B','#5B9BD5','#3D7AB8'] },
+      { id: 'terminal', name: 'The Terminal', desc: 'Black, green text, Bloomberg vibes', bg: '#0A0A0A', sidebar: '#050505', bars: ['#116611','#22AA22','#33FF33','#22CC22'] },
+      { id: 'slate', name: 'Clean Slate', desc: 'White, minimal, blue accents', bg: '#F5F7FA', sidebar: '#1A1A2E', bars: ['#D1D5DB','#93C5FD','#2563EB','#60A5FA'] },
+    ];
+
+    function renderThemes() {
+      var current = getCurrentTheme();
+      var grid = document.getElementById('themeGrid');
+      grid.innerHTML = themeData.map(function(t) {
+        var active = t.id === current ? ' active' : '';
+        var bars = t.bars.map(function(c, i) {
+          return '<div class="theme-card-bar" style="background:' + c + ';height:' + (12 + i * 10) + 'px"></div>';
+        }).join('');
+        return '<div class="theme-card' + active + '" onclick="pickTheme(\'' + t.id + '\')">' +
+          '<div class="theme-card-preview" style="background:' + t.bg + ';border:1px solid ' + t.sidebar + '">' + bars + '</div>' +
+          '<div class="theme-card-name">' + t.name + '</div>' +
+          '<div class="theme-card-desc">' + t.desc + '</div></div>';
+      }).join('');
     }
-    window.handleDarkToggle = function () {
-      toggleDarkMode();
-      updateDarkButton();
+
+    window.pickTheme = function(id) {
+      setTheme(id);
+      renderThemes();
     };
-    updateDarkButton();
+
+    renderThemes();
 
     // Push notification management
     checkPushStatus();
