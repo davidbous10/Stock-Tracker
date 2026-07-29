@@ -407,6 +407,8 @@
     midnight: { name: 'Midnight', class: 'theme-midnight' },
     terminal: { name: 'The Terminal', class: 'theme-terminal' },
     slate: { name: 'Clean Slate', class: 'theme-slate' },
+    obsidian: { name: 'Obsidian', class: 'theme-obsidian' },
+    sandstone: { name: 'Sandstone', class: 'theme-sandstone' },
   };
 
   var themeCSS = document.createElement('style');
@@ -506,6 +508,70 @@
     html.theme-slate .stock-header.up .stock-name, html.theme-slate .stock-header.down .stock-name { color: #6B7280; }
     html.theme-slate .landing { color: #1A1A2E; }
     html.theme-slate .landing-feature { background: #FFF; border-color: #D1D5DB; }
+
+    html.theme-obsidian { background: #1A1A1A !important; }
+    html.theme-obsidian body { background: #1A1A1A; color: #E0D5C5; }
+    html.theme-obsidian .sidebar { background: #111111; }
+    html.theme-obsidian .side-nav-link.active { background: rgba(201,167,92,0.2); }
+    html.theme-obsidian .eyebrow { color: #C9A75C; }
+    html.theme-obsidian .auth-card { background: #222; border-color: #3A3530; }
+    html.theme-obsidian .auth-card::before { border-color: rgba(201,167,92,0.25); }
+    html.theme-obsidian .auth-tab.active { background: #3A3020; color: #E0D5C5; }
+    html.theme-obsidian #authForm input, html.theme-obsidian .chat-input { background: #1A1A1A; border-color: #3A3530; color: #E0D5C5; }
+    html.theme-obsidian .btn-auth-submit { background: #3A3020; color: #C9A75C; }
+    html.theme-obsidian .chat-panel { background: #222; border-color: #3A3530; }
+    html.theme-obsidian .chat-msg.assistant { background: #2A2520; border-color: #3A3530; color: #E0D5C5; }
+    html.theme-obsidian .chat-input-row { background: #1A1A1A; border-color: #3A3530; }
+    html.theme-obsidian .chat-fab { background: #2A2520; border: 1px solid #3A3530; }
+    html.theme-obsidian .bottom-tabs { background: #111; border-color: #2A2520; }
+    html.theme-obsidian .skeleton { background: linear-gradient(90deg, #2A2520 25%, #3A3530 37%, #2A2520 63%); background-size: 400% 100%; }
+    html.theme-obsidian .card, html.theme-obsidian .acct-box, html.theme-obsidian .stat-card, html.theme-obsidian .compare-card, html.theme-obsidian .insight-card, html.theme-obsidian .perf-card, html.theme-obsidian .pos-table, html.theme-obsidian .ord-table, html.theme-obsidian .screener-table, html.theme-obsidian .chart-card, html.theme-obsidian .stock-header.flat { background: #222; border-color: #3A3530; color: #E0D5C5; }
+    html.theme-obsidian .section-label, html.theme-obsidian .cat-group-header { color: #8A7A65; }
+    html.theme-obsidian .quick-stats { background: #222; border-color: #3A3530; }
+    html.theme-obsidian .ss-results { background: #222; border-color: #3A3530; }
+    html.theme-obsidian .ss-result { color: #E0D5C5; border-color: #3A3530; }
+    html.theme-obsidian .ss-result:hover { background: #2A2520; }
+    html.theme-obsidian .notif-dropdown { background: #222; border-color: #3A3530; }
+    html.theme-obsidian .notif-item { border-color: #3A3530; color: #E0D5C5; }
+    html.theme-obsidian .filter-input { background: #1A1A1A; border-color: #3A3530; color: #E0D5C5; }
+    html.theme-obsidian .view-toggle, html.theme-obsidian .cat-btn, html.theme-obsidian .refresh-btn, html.theme-obsidian .trackr-chip, html.theme-obsidian .cat-auto-btn { background: #2A2520; border-color: #3A3530; color: #8A7A65; }
+    html.theme-obsidian .view-toggle.active, html.theme-obsidian .cat-btn.active { background: #3A3020; color: #C9A75C; border-color: #C9A75C; }
+    html.theme-obsidian .landing { color: #E0D5C5; }
+    html.theme-obsidian .landing-feature { background: #222; border-color: #3A3530; }
+
+    html.theme-sandstone { background: #F5EDE0 !important; }
+    html.theme-sandstone body { background: #F5EDE0; color: #3D2E1E; }
+    html.theme-sandstone .sidebar { background: #3D2E1E; }
+    html.theme-sandstone .side-nav-link { color: #C9B99A; }
+    html.theme-sandstone .side-nav-link.active { background: rgba(166,120,60,0.3); color: #F5EDE0; }
+    html.theme-sandstone .eyebrow { color: #A6783C; }
+    html.theme-sandstone .auth-card { background: #FFF8EE; border-color: #D4C4A8; }
+    html.theme-sandstone .auth-card::before { border-color: rgba(166,120,60,0.3); }
+    html.theme-sandstone .auth-tab.active { background: #A6783C; color: #FFF8EE; }
+    html.theme-sandstone #authForm input, html.theme-sandstone .chat-input { background: #F5EDE0; border-color: #D4C4A8; color: #3D2E1E; }
+    html.theme-sandstone .btn-auth-submit { background: #A6783C; color: #FFF8EE; }
+    html.theme-sandstone .chat-fab { background: #A6783C; }
+    html.theme-sandstone .chat-panel { background: #FFF8EE; border-color: #D4C4A8; }
+    html.theme-sandstone .chat-header { background: #A6783C; }
+    html.theme-sandstone .chat-msg.user { background: #A6783C; }
+    html.theme-sandstone .chat-msg.assistant { background: #F5EDE0; border-color: #D4C4A8; color: #3D2E1E; }
+    html.theme-sandstone .chat-input-row { background: #F5EDE0; border-color: #D4C4A8; }
+    html.theme-sandstone .chat-send { background: #A6783C; }
+    html.theme-sandstone .bottom-tabs { background: #3D2E1E; border-color: #5A4530; }
+    html.theme-sandstone .skeleton { background: linear-gradient(90deg, #E8DCCA 25%, #D4C4A8 37%, #E8DCCA 63%); background-size: 400% 100%; }
+    html.theme-sandstone .card, html.theme-sandstone .acct-box, html.theme-sandstone .stat-card, html.theme-sandstone .compare-card, html.theme-sandstone .insight-card, html.theme-sandstone .perf-card, html.theme-sandstone .pos-table, html.theme-sandstone .ord-table, html.theme-sandstone .screener-table, html.theme-sandstone .chart-card, html.theme-sandstone .stock-header.flat { background: #FFF8EE; border-color: #D4C4A8; color: #3D2E1E; }
+    html.theme-sandstone .section-label, html.theme-sandstone .cat-group-header { color: #8A7050; }
+    html.theme-sandstone .quick-stats { background: #FFF8EE; border-color: #D4C4A8; }
+    html.theme-sandstone .ss-results { background: #FFF8EE; border-color: #D4C4A8; }
+    html.theme-sandstone .ss-result { color: #3D2E1E; border-color: #D4C4A8; }
+    html.theme-sandstone .ss-result:hover { background: #F5EDE0; }
+    html.theme-sandstone .notif-dropdown { background: #FFF8EE; border-color: #D4C4A8; }
+    html.theme-sandstone .notif-item { border-color: #D4C4A8; color: #3D2E1E; }
+    html.theme-sandstone .filter-input { background: #FFF8EE; border-color: #D4C4A8; color: #3D2E1E; }
+    html.theme-sandstone .view-toggle, html.theme-sandstone .cat-btn, html.theme-sandstone .refresh-btn, html.theme-sandstone .trackr-chip, html.theme-sandstone .cat-auto-btn { background: #FFF8EE; border-color: #D4C4A8; color: #8A7050; }
+    html.theme-sandstone .view-toggle.active, html.theme-sandstone .cat-btn.active { background: #A6783C; color: #FFF8EE; border-color: #A6783C; }
+    html.theme-sandstone .landing { color: #3D2E1E; }
+    html.theme-sandstone .landing-feature { background: #FFF8EE; border-color: #D4C4A8; }
   `;
   document.head.appendChild(themeCSS);
 
