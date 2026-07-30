@@ -296,6 +296,33 @@ async function initDb(retries = 10, delayMs = 3000) {
       `);
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_chat_history_user ON chat_history (user_id, created_at DESC)`);
 
+      // Two-factor authentication
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT DEFAULT NULL`);
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN DEFAULT false`);
+
+      // WebAuthn credentials for Face ID / biometrics
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS webauthn_credentials (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id),
+          credential_id TEXT NOT NULL,
+          public_key TEXT NOT NULL,
+          counter INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+
+      // Admin metrics tracking
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS admin_metrics (
+          id SERIAL PRIMARY KEY,
+          metric_name TEXT NOT NULL,
+          metric_value NUMERIC,
+          recorded_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_admin_metrics_name ON admin_metrics (metric_name, recorded_at DESC)`);
+
       console.log('Database connected and ready.');
       dbReady = true;
       return;
@@ -392,9 +419,10 @@ app.post('/api/auth/login', async (req, res) => {
 
   const email = (req.body.email || '').trim().toLowerCase();
   const password = req.body.password || '';
+  const totpCode = req.body.totpCode || '';
 
   try {
-    const { rows } = await pool.query('SELECT id, password_hash, name FROM users WHERE email = $1', [email]);
+    const { rows } = await pool.query('SELECT id, password_hash, name, totp_enabled, totp_secret FROM users WHERE email = $1', [email]);
 
     if (rows.length === 0) {
       return res.status(401).json({ error: 'Invalid email or password' });
@@ -405,6 +433,20 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
+    // Check 2FA if enabled
+    if (rows[0].totp_enabled && rows[0].totp_secret) {
+      if (!totpCode) {
+        // Password correct but need 2FA code
+        return res.json({ requires2FA: true });
+      }
+      // Verify TOTP code
+      const { authenticator } = require('otplib');
+      const valid = authenticator.check(totpCode, rows[0].totp_secret);
+      if (!valid) {
+        return res.status(401).json({ error: 'Invalid authentication code' });
+      }
+    }
+
     req.session.userId = rows[0].id;
     req.session.userEmail = email;
     req.session.userName = rows[0].name || null;
@@ -412,6 +454,68 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({ email, name: rows[0].name || null });
   } catch (err) {
     res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// 2FA setup: generate secret and QR code
+app.post('/api/auth/2fa/setup', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  try {
+    const { authenticator } = require('otplib');
+    const QRCode = require('qrcode');
+    const secret = authenticator.generateSecret();
+    const otpauth = authenticator.keyuri(req.session.userEmail, 'Trade Track', secret);
+    const qrDataUrl = await QRCode.toDataURL(otpauth);
+
+    // Store secret temporarily (not enabled until verified)
+    await pool.query('UPDATE users SET totp_secret = $1 WHERE id = $2', [secret, req.session.userId]);
+
+    res.json({ qr: qrDataUrl, secret });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not set up 2FA' });
+  }
+});
+
+// 2FA verify: confirm the code works and enable 2FA
+app.post('/api/auth/2fa/verify', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  const code = req.body.code || '';
+  try {
+    const { rows } = await pool.query('SELECT totp_secret FROM users WHERE id = $1', [req.session.userId]);
+    if (!rows[0].totp_secret) return res.status(400).json({ error: 'Setup required first' });
+
+    const { authenticator } = require('otplib');
+    const valid = authenticator.check(code, rows[0].totp_secret);
+    if (!valid) return res.status(400).json({ error: 'Invalid code. Try again.' });
+
+    await pool.query('UPDATE users SET totp_enabled = true WHERE id = $1', [req.session.userId]);
+    logActivity(req.session.userId, '2fa_enabled');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Verification failed' });
+  }
+});
+
+// 2FA disable
+app.post('/api/auth/2fa/disable', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  try {
+    await pool.query('UPDATE users SET totp_enabled = false, totp_secret = NULL WHERE id = $1', [req.session.userId]);
+    logActivity(req.session.userId, '2fa_disabled');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not disable 2FA' });
+  }
+});
+
+// 2FA status
+app.get('/api/auth/2fa/status', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  try {
+    const { rows } = await pool.query('SELECT totp_enabled FROM users WHERE id = $1', [req.session.userId]);
+    res.json({ enabled: rows[0].totp_enabled || false });
+  } catch (err) {
+    res.json({ enabled: false });
   }
 });
 
@@ -576,15 +680,85 @@ app.post('/api/auth/reset-password', async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// ADMIN API — only accessible to user_id = 1. Powers the admin
-// dashboard with user stats, usage metrics, and activity logs.
+// ADMIN API — separate admin authentication system
+// Uses ADMIN_PASSWORD env var for a dedicated admin login
+// Falls back to user_id = 1 check if no admin password is set
 // ------------------------------------------------------------
-function requireAdmin(req, res, next) {
-  if (!req.session || req.session.userId !== 1) {
-    return res.status(403).json({ error: 'Admin only' });
+
+// Admin login endpoint
+app.post('/api/admin/login', async (req, res) => {
+  const password = req.body.password || '';
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (!adminPassword) {
+    return res.status(500).json({ error: 'Admin password not configured' });
   }
-  next();
+
+  if (password === adminPassword) {
+    req.session.isAdmin = true;
+    res.json({ ok: true });
+  } else {
+    res.status(401).json({ error: 'Invalid admin password' });
+  }
+});
+
+app.post('/api/admin/logout', (req, res) => {
+  req.session.isAdmin = false;
+  res.json({ ok: true });
+});
+
+function requireAdmin(req, res, next) {
+  // Check dedicated admin session OR user_id = 1 fallback
+  if (req.session && (req.session.isAdmin || req.session.userId === 1)) {
+    return next();
+  }
+  return res.status(403).json({ error: 'Admin access required' });
 }
+
+// Admin metrics: record a snapshot of key metrics
+async function recordMetrics() {
+  if (!dbReady) return;
+  try {
+    const { rows: uc } = await pool.query('SELECT COUNT(*) FROM users');
+    const { rows: tc } = await pool.query('SELECT COUNT(DISTINCT ticker) FROM watchlist');
+    const { rows: ac } = await pool.query('SELECT COUNT(*) FROM alerts WHERE active = true');
+    const { rows: cc } = await pool.query('SELECT COUNT(*) FROM chat_history WHERE created_at > NOW() - INTERVAL \'24 hours\'');
+
+    await pool.query('INSERT INTO admin_metrics (metric_name, metric_value) VALUES ($1, $2)', ['total_users', uc[0].count]);
+    await pool.query('INSERT INTO admin_metrics (metric_name, metric_value) VALUES ($1, $2)', ['total_tickers', tc[0].count]);
+    await pool.query('INSERT INTO admin_metrics (metric_name, metric_value) VALUES ($1, $2)', ['active_alerts', ac[0].count]);
+    await pool.query('INSERT INTO admin_metrics (metric_name, metric_value) VALUES ($1, $2)', ['daily_chats', cc[0].count]);
+  } catch (e) {}
+}
+// Record metrics every hour
+setInterval(recordMetrics, 60 * 60 * 1000);
+setTimeout(recordMetrics, 15000);
+
+// Admin metrics history
+app.get('/api/admin/metrics-history', requireAdmin, async (req, res) => {
+  if (!requireDb(res)) return;
+  try {
+    const { rows } = await pool.query(
+      'SELECT metric_name, metric_value, recorded_at FROM admin_metrics WHERE recorded_at > NOW() - INTERVAL \'7 days\' ORDER BY recorded_at DESC LIMIT 500'
+    );
+    res.json({ metrics: rows });
+  } catch (err) {
+    res.json({ metrics: [] });
+  }
+});
+
+// Admin error log
+app.get('/api/admin/errors', requireAdmin, async (req, res) => {
+  if (!requireDb(res)) return;
+  try {
+    const { rows } = await pool.query(
+      "SELECT * FROM activity_log WHERE action LIKE '%error%' OR action LIKE '%fail%' ORDER BY created_at DESC LIMIT 50"
+    );
+    res.json({ errors: rows });
+  } catch (err) {
+    res.json({ errors: [] });
+  }
+});
 
 // Overview stats
 app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res) => {
