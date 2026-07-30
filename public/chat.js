@@ -595,101 +595,216 @@
   // Animations and interactive feel
   var animStyle = document.createElement('style');
   animStyle.textContent = `
-    /* Card slide-up animation */
-    @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-    .card, .sector-row, .pos-table tr, .earn-item, .news-card, .featured-card,
-    .stat-box, .acct-box, .insight-card, .perf-card, .peer-card, .compare-card,
-    .summary-pill, .ticker-group, .saved-item, .admin-table tr {
-      animation: slideUp 0.35s ease-out both;
-    }
-    .card:nth-child(1), .sector-row:nth-child(2) { animation-delay: 0s; }
-    .card:nth-child(2), .sector-row:nth-child(3) { animation-delay: 0.04s; }
-    .card:nth-child(3), .sector-row:nth-child(4) { animation-delay: 0.08s; }
-    .card:nth-child(4), .sector-row:nth-child(5) { animation-delay: 0.12s; }
-    .card:nth-child(5), .sector-row:nth-child(6) { animation-delay: 0.16s; }
-    .card:nth-child(6) { animation-delay: 0.2s; }
-    .card:nth-child(7) { animation-delay: 0.24s; }
-    .card:nth-child(8) { animation-delay: 0.28s; }
-    .card:nth-child(n+9) { animation-delay: 0.32s; }
+    /* ================================================
+       APPLE-QUALITY DESIGN SYSTEM
+       Glassmorphism, smooth animations, iPhone-optimized
+       ================================================ */
 
-    /* Hover lift on cards */
+    /* Smooth slide-up entrance */
+    @keyframes slideUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    @keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+
+    .main-content { animation: fadeIn 0.35s ease-out; }
+
+    /* Staggered card entrance */
+    .card, .sector-row, .earn-item, .news-card, .featured-card,
+    .stat-box, .acct-box, .insight-card, .perf-card, .peer-card, .compare-card,
+    .summary-pill, .ticker-group, .saved-item, .pos-table tr, .ord-table tr {
+      animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .card:nth-child(1) { animation-delay: 0s; }
+    .card:nth-child(2) { animation-delay: 0.05s; }
+    .card:nth-child(3) { animation-delay: 0.1s; }
+    .card:nth-child(4) { animation-delay: 0.15s; }
+    .card:nth-child(5) { animation-delay: 0.2s; }
+    .card:nth-child(6) { animation-delay: 0.25s; }
+    .card:nth-child(7) { animation-delay: 0.3s; }
+    .card:nth-child(n+8) { animation-delay: 0.35s; }
+    .sector-row:nth-child(2) { animation-delay: 0.03s; }
+    .sector-row:nth-child(3) { animation-delay: 0.06s; }
+    .sector-row:nth-child(4) { animation-delay: 0.09s; }
+    .sector-row:nth-child(5) { animation-delay: 0.12s; }
+    .sector-row:nth-child(n+6) { animation-delay: 0.15s; }
+    .greeting-text { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+    .greeting-date { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both; }
+    .market-status { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.14s both; }
+
+    /* Glassmorphism effect on cards */
+    .card, .insight-card, .perf-card, .compare-card, .acct-box, .peer-card {
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    /* Smooth hover lift (desktop only) */
     .card, .peer-card, .sector-row, .earn-item, .insight-card, .compare-card,
     .stat-box, .acct-box, .summary-pill, .perf-card {
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
     }
-    .card:hover, .insight-card:hover, .compare-card:hover, .perf-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 16px rgba(35,40,31,0.12);
-    }
-    .peer-card:hover { transform: translateY(-2px); }
-    .stat-box:hover, .acct-box:hover, .summary-pill:hover {
-      transform: translateY(-1px);
+    @media (min-width: 801px) {
+      .card:hover, .insight-card:hover, .compare-card:hover, .perf-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+      }
+      .peer-card:hover, .earn-item:hover { transform: translateY(-2px); }
+      .stat-box:hover, .acct-box:hover, .summary-pill:hover { transform: translateY(-1px); }
+      .sector-row:hover { transform: translateX(3px); }
     }
 
-    /* Mobile touch feedback */
+    /* All interactive elements get smooth transitions */
+    a, button, input, select, .tab-link, .side-nav-link, .trade-btn, .trackr-chip,
+    .cat-btn, .view-toggle, .log-filter, .filter-btn, .refresh-btn,
+    .btn-watchlist, .btn-onboard, .chat-suggestion, .chat-send {
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Smooth background transitions for theme switching */
+    html, body, .sidebar, .bottom-tabs, .chat-panel, .chat-fab {
+      transition: background-color 0.4s ease, color 0.3s ease, border-color 0.3s ease;
+    }
+    .tab-link, .tab-link svg { transition: color 0.2s ease, stroke 0.2s ease; }
+
+    /* ================================================
+       MOBILE (IPHONE) OPTIMIZATION
+       ================================================ */
     @media (max-width: 800px) {
+      /* Touch feedback: scale down on press */
       .card:active, .peer-card:active, .sector-row:active, .earn-item:active,
       .insight-card:active, .trade-btn:active, .trackr-chip:active,
-      .btn-watchlist:active, .cat-btn:active, .tab-link:active {
+      .btn-watchlist:active, .cat-btn:active, .tab-link:active,
+      .compare-card:active, .acct-box:active, .summary-pill:active,
+      .btn-quick-trade:active, .filter-btn:active, .refresh-btn:active,
+      .chat-suggestion:active, .view-toggle:active {
         transform: scale(0.97);
         transition: transform 0.1s ease;
       }
-      .card:hover, .insight-card:hover, .compare-card:hover, .perf-card:hover {
+
+      /* Disable hover effects on touch */
+      .card:hover, .insight-card:hover, .compare-card:hover, .perf-card:hover,
+      .peer-card:hover, .sector-row:hover {
         transform: none;
         box-shadow: none;
       }
+
+      /* Smoother scrolling */
+      .main-content { -webkit-overflow-scrolling: touch; }
+
+      /* Safe area padding for notched iPhones */
+      .bottom-tabs {
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+      }
+      body {
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+      }
+
+      /* Prevent text size adjustment on rotation */
+      html { -webkit-text-size-adjust: 100%; }
+
+      /* Tap highlight removal */
+      * { -webkit-tap-highlight-color: transparent; }
+
+      /* Better touch targets (min 44px) */
+      .tab-link { min-height: 44px; display: flex; align-items: center; justify-content: center; }
+      .side-nav-link { min-height: 44px; }
+      .trackr-chip { min-height: 36px; }
+      .cat-btn { min-height: 36px; }
+      .btn-watchlist { min-height: 44px; }
+
+      /* Fullscreen chat on mobile */
+      .chat-panel {
+        width: 100vw !important;
+        height: calc(100vh - 60px) !important;
+        right: 0 !important;
+        bottom: 60px !important;
+        border-radius: 0 !important;
+        border: none !important;
+      }
     }
 
-    /* Smooth transitions on all interactive elements */
-    a, button, .tab-link, .side-nav-link, .trade-btn, .trackr-chip,
-    .cat-btn, .view-toggle, .log-filter, .filter-btn, .refresh-btn,
-    .btn-watchlist, .btn-onboard, .chat-suggestion, .chat-send {
-      transition: all 0.15s ease;
+    /* Chat panel glass effect */
+    .chat-panel {
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+      transform: translateY(20px); opacity: 0;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
     }
-
-    /* Fade in for main content */
-    .main-content { animation: fadeIn 0.3s ease-out; }
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-    /* Price count-up class */
-    .count-up { transition: color 0.3s ease; }
-
-    /* Smooth page background transitions for dark mode */
-    html { transition: background-color 0.3s ease; }
-    body { transition: background-color 0.3s ease, color 0.3s ease; }
-    .sidebar { transition: background-color 0.3s ease; }
-
-    /* Bottom tab bar smooth transitions */
-    .tab-link svg { transition: stroke 0.2s ease; }
-    .tab-link { transition: color 0.2s ease; }
-
-    /* Toast notification for copy actions */
-    .toast {
-      position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
-      background: #23281F; color: #F3EEDF; padding: 8px 20px;
-      border-radius: 4px; font-size: 12px; font-weight: 600;
-      font-family: 'Archivo', system-ui, sans-serif;
-      z-index: 300; opacity: 0; transition: opacity 0.3s ease;
-      pointer-events: none;
-    }
-    .toast.show { opacity: 1; }
-
-    /* Greeting text animation */
-    .greeting-text { animation: slideUp 0.4s ease-out; }
-    .greeting-date { animation: slideUp 0.4s ease-out 0.1s both; }
-    .market-status { animation: slideUp 0.4s ease-out 0.15s both; }
-
-    /* Chat panel slide up */
-    .chat-panel { transition: transform 0.25s ease, opacity 0.25s ease; transform: translateY(20px); opacity: 0; }
     .chat-panel.open { transform: translateY(0); opacity: 1; }
 
-    /* Notification dropdown slide */
-    .notif-dropdown { transition: transform 0.2s ease, opacity 0.2s ease; transform: translateY(8px); opacity: 0; }
+    /* Chat fab with glass */
+    .chat-fab {
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+    }
+    .chat-fab:hover { transform: scale(1.08); box-shadow: 0 6px 28px rgba(0,0,0,0.2); }
+    .chat-fab:active { transform: scale(0.95); }
+
+    /* Notification dropdown glass */
+    .notif-dropdown {
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+      transform: translateY(8px); opacity: 0;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
     .notif-dropdown.open { transform: translateY(0); opacity: 1; }
 
-    /* Pulse on the market status dot */
-    .market-status-dot { animation: pulse 2s infinite; }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    /* Toast notification */
+    .toast {
+      position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(10px);
+      background: rgba(35,40,31,0.92); color: #F3EEDF; padding: 10px 24px;
+      border-radius: 20px; font-size: 13px; font-weight: 600;
+      font-family: 'Archivo', system-ui, sans-serif;
+      z-index: 300; opacity: 0;
+      transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* Market status dot pulse */
+    .market-status-dot { animation: pulse 2s ease-in-out infinite; }
+
+    /* Improved skeleton shimmer */
+    .skeleton {
+      animation: shimmer 1.5s infinite linear;
+      background-size: 400% 100%;
+    }
+
+    /* Smooth number color transition */
+    .count-up, .price { transition: color 0.4s ease; }
+
+    /* Sidebar glass effect on mobile */
+    @media (max-width: 800px) {
+      .sidebar {
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+      }
+    }
+
+    /* Button press states */
+    .btn-auth-submit:active, .filter-btn:active, .compare-btn:active {
+      transform: scale(0.98);
+    }
+
+    /* Input focus glow */
+    input:focus, .compare-input:focus, .filter-input:focus, .chat-input:focus {
+      box-shadow: 0 0 0 3px rgba(201,167,92,0.15);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    /* Smooth scrollbar (webkit) */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(150,150,150,0.3); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(150,150,150,0.5); }
+
+    /* Price flash */
+    @keyframes priceFlashUp { 0% { color: var(--up); } 100% { color: inherit; } }
+    @keyframes priceFlashDown { 0% { color: var(--down); } 100% { color: inherit; } }
+    .price-flash-up { animation: priceFlashUp 1.2s ease-out; }
+    .price-flash-down { animation: priceFlashDown 1.2s ease-out; }
   `;
   document.head.appendChild(animStyle);
 
@@ -753,14 +868,6 @@
       }).catch(function () {});
     }
   });
-  var flashStyle = document.createElement('style');
-  flashStyle.textContent = `
-    @keyframes priceFlashUp { 0% { color: var(--up); } 100% { color: inherit; } }
-    @keyframes priceFlashDown { 0% { color: var(--down); } 100% { color: inherit; } }
-    .price-flash-up { animation: priceFlashUp 1.2s ease-out; }
-    .price-flash-down { animation: priceFlashDown 1.2s ease-out; }
-  `;
-  document.head.appendChild(flashStyle);
 
   // Observe price changes and flash them
   var lastPrices = {};
