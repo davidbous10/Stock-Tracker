@@ -200,6 +200,51 @@
   document.body.appendChild(panel);
   document.body.appendChild(fab);
 
+  // ---- Mobile tab bar fix: make 6 tabs fit on all phones ----
+  var mobileFixStyle = document.createElement('style');
+  mobileFixStyle.textContent = `
+    @media (max-width: 800px) {
+      .bottom-tabs nav {
+        display: flex; justify-content: space-around; align-items: center;
+        padding: 0 2px;
+      }
+      .tab-link {
+        flex: 1; min-width: 0;
+        display: flex; flex-direction: column; align-items: center; gap: 2px;
+        padding: 6px 2px; font-size: 9px; text-align: center;
+        white-space: nowrap; overflow: hidden;
+      }
+      .tab-link svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+      /* Back button for sub-pages */
+      .mobile-back {
+        display: inline-flex; align-items: center; gap: 6px;
+        font-size: 13px; font-weight: 600; color: var(--ink-muted);
+        text-decoration: none; padding: 8px 0; margin-bottom: 8px;
+        font-family: var(--font-ui, 'Archivo', sans-serif);
+      }
+      .mobile-back:hover { color: var(--ink); }
+      .mobile-back svg { width: 16px; height: 16px; }
+    }
+    @media (min-width: 801px) {
+      .mobile-back { display: none; }
+    }
+  `;
+  document.head.appendChild(mobileFixStyle);
+
+  // Inject back button on sub-pages (pages without sidebar showing on mobile)
+  var isSubPage = ['/stock.html','/compare.html','/screener.html','/reset.html'].some(function(p) {
+    return window.location.pathname.includes(p);
+  });
+  var mainContent = document.querySelector('.main-content');
+  if (isSubPage && mainContent) {
+    var backBtn = document.createElement('a');
+    backBtn.className = 'mobile-back';
+    backBtn.href = 'javascript:history.back()';
+    backBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg> Back';
+    mainContent.insertBefore(backBtn, mainContent.firstChild);
+  }
+
   // ---- Notification bell: inject into sidebar ----
   var sideNav = document.querySelector('.sidebar .side-nav');
   if (sideNav) {
