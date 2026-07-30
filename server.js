@@ -35,6 +35,19 @@ const app = express();
 app.set('trust proxy', 1);
 app.use(express.json());
 
+// Simple cookie parser (for trusted device cookies)
+app.use((req, res, next) => {
+  req.cookies = {};
+  const cookieHeader = req.headers.cookie;
+  if (cookieHeader) {
+    cookieHeader.split(';').forEach(c => {
+      const [key, ...val] = c.trim().split('=');
+      if (key) req.cookies[key] = val.join('=');
+    });
+  }
+  next();
+});
+
 const isLocal = !process.env.DATABASE_URL || process.env.DATABASE_URL.includes('localhost');
 
 const pool = new Pool({
@@ -433,17 +446,28 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    // Check 2FA if enabled
+    // Check 2FA if enabled - but skip on trusted devices
     if (rows[0].totp_enabled && rows[0].totp_secret) {
-      if (!totpCode) {
-        // Password correct but need 2FA code
-        return res.json({ requires2FA: true });
-      }
-      // Verify TOTP code
-      const { authenticator } = require('otplib');
-      const valid = authenticator.check(totpCode, rows[0].totp_secret);
-      if (!valid) {
-        return res.status(401).json({ error: 'Invalid authentication code' });
+      const trustedCookie = req.cookies && req.cookies.tt_trusted;
+      const isTrusted = trustedCookie === String(rows[0].id);
+
+      if (!isTrusted) {
+        if (!totpCode) {
+          // New device, password correct, need 2FA code
+          return res.json({ requires2FA: true });
+        }
+        // Verify TOTP code
+        const { authenticator } = require('otplib');
+        const valid = authenticator.check(totpCode, rows[0].totp_secret);
+        if (!valid) {
+          return res.status(401).json({ error: 'Invalid authentication code' });
+        }
+        // 2FA passed - trust this device for 30 days
+        res.cookie('tt_trusted', String(rows[0].id), {
+          maxAge: 30 * 24 * 60 * 60 * 1000,
+          httpOnly: true,
+          sameSite: 'lax',
+        });
       }
     }
 
