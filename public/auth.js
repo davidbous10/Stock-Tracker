@@ -44,6 +44,12 @@ const AuthGuard = (function () {
     authSubmit.textContent = mode === 'login' ? 'Log in' : 'Sign up';
     authHint.textContent = mode === 'signup' ? 'Password must be at least 8 characters' : '';
     authHint.innerHTML = mode === 'login' ? '<a href="/reset.html" style="color:var(--ink-faint,#9A9C8B);font-size:11px;text-decoration:none">Forgot password?</a>' : authHint.textContent;
+
+    // Show Face ID button on login mode if supported
+    var faceIdBtn = document.getElementById('faceIdLogin');
+    if (faceIdBtn) {
+      faceIdBtn.style.display = (mode === 'login' && window.PublicKeyCredential) ? 'block' : 'none';
+    }
     authPassword.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
     authSubmit.dataset.mode = mode;
 
@@ -196,6 +202,68 @@ const AuthGuard = (function () {
         authSubmit.disabled = false;
       }
     });
+
+    // Inject Face ID login button
+    if (window.PublicKeyCredential && authForm) {
+      var faceBtn = document.createElement('button');
+      faceBtn.type = 'button';
+      faceBtn.id = 'faceIdLogin';
+      faceBtn.style.cssText = 'width:100%;padding:11px;background:transparent;border:1px solid var(--rule-strong,#C6BEA2);border-radius:2px;font-size:12px;font-weight:600;cursor:pointer;margin-top:8px;color:var(--ink-muted,#686C5B);font-family:Archivo,system-ui,sans-serif;display:none';
+      faceBtn.textContent = 'Sign in with Face ID';
+      faceBtn.addEventListener('click', async function() {
+        var email = authEmail.value.trim().toLowerCase();
+        if (!email) { authMsg.textContent = 'Enter your email first'; return; }
+        faceBtn.disabled = true;
+        faceBtn.textContent = 'Verifying...';
+        try {
+          var optRes = await fetch('/api/auth/webauthn/login-options', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email }),
+          });
+          var options = await optRes.json();
+          if (!optRes.ok) { authMsg.textContent = options.error || 'Not available'; faceBtn.disabled = false; faceBtn.textContent = 'Sign in with Face ID'; return; }
+
+          options.challenge = b64urlToBuf(options.challenge);
+          options.allowCredentials = options.allowCredentials.map(function(c) {
+            c.id = b64urlToBuf(c.id);
+            return c;
+          });
+
+          var assertion = await navigator.credentials.get({ publicKey: options });
+
+          var loginRes = await fetch('/api/auth/webauthn/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ credentialId: bufToB64url(assertion.rawId) }),
+          });
+          var loginData = await loginRes.json();
+          if (loginRes.ok) {
+            showApp(loginData.email, loginData.name || null);
+          } else {
+            authMsg.textContent = loginData.error || 'Authentication failed';
+          }
+        } catch (err) {
+          if (err.name !== 'NotAllowedError') authMsg.textContent = 'Biometric login not available';
+        }
+        faceBtn.disabled = false;
+        faceBtn.textContent = 'Sign in with Face ID';
+      });
+      authForm.parentNode.insertBefore(faceBtn, authForm.nextSibling);
+    }
+
+    function b64urlToBuf(s) {
+      s = s.replace(/-/g,'+').replace(/_/g,'/');
+      while(s.length%4) s+='=';
+      var b=atob(s),a=new Uint8Array(b.length);
+      for(var i=0;i<b.length;i++) a[i]=b.charCodeAt(i);
+      return a.buffer;
+    }
+    function bufToB64url(buf) {
+      var b=new Uint8Array(buf),s='';
+      for(var i=0;i<b.byteLength;i++) s+=String.fromCharCode(b[i]);
+      return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    }
 
     const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn) {
