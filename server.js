@@ -761,7 +761,7 @@ app.get('/api/admin/errors', requireAdmin, async (req, res) => {
 });
 
 // Overview stats
-app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res) => {
+app.get('/api/admin/stats', requireAdmin, async (req, res) => {
   if (!requireDb(res)) return;
   try {
     const { rows: userCount } = await pool.query('SELECT COUNT(*) FROM users');
@@ -809,7 +809,7 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res) => {
 });
 
 // Usage metrics
-app.get('/api/admin/usage', requireAuth, requireAdmin, async (req, res) => {
+app.get('/api/admin/usage', requireAdmin, async (req, res) => {
   if (!requireDb(res)) return;
   try {
     // Action counts (last 7 days)
@@ -860,7 +860,7 @@ app.get('/api/admin/usage', requireAuth, requireAdmin, async (req, res) => {
 });
 
 // Activity log (paginated)
-app.get('/api/admin/logs', requireAuth, requireAdmin, async (req, res) => {
+app.get('/api/admin/logs', requireAdmin, async (req, res) => {
   if (!requireDb(res)) return;
   const limit = Math.min(parseInt(req.query.limit) || 50, 200);
   const offset = parseInt(req.query.offset) || 0;
@@ -910,6 +910,39 @@ app.get('/api/admin/logs', requireAuth, requireAdmin, async (req, res) => {
 
 // ------------------------------------------------------------
 // WATCHLIST ROUTES — every one now requires login, and every
+
+// Admin: list users
+app.get('/api/admin/users', requireAdmin, async (req, res) => {
+  if (!requireDb(res)) return;
+  try {
+    const { rows } = await pool.query('SELECT id, email, name, created_at FROM users ORDER BY created_at DESC');
+    res.json({ users: rows });
+  } catch (err) { res.json({ users: [] }); }
+});
+
+// Admin: popular stocks
+app.get('/api/admin/popular-stocks', requireAdmin, async (req, res) => {
+  if (!requireDb(res)) return;
+  try {
+    const { rows } = await pool.query('SELECT ticker, COUNT(DISTINCT user_id) as count FROM watchlist GROUP BY ticker ORDER BY count DESC LIMIT 20');
+    res.json({ stocks: rows });
+  } catch (err) { res.json({ stocks: [] }); }
+});
+
+// Admin: activity log
+app.get('/api/admin/activity', requireAdmin, async (req, res) => {
+  if (!requireDb(res)) return;
+  const limit = Math.min(parseInt(req.query.limit) || 30, 200);
+  try {
+    const { rows } = await pool.query(
+      'SELECT al.user_id, u.email, al.action, al.detail, al.created_at FROM activity_log al LEFT JOIN users u ON al.user_id = u.id ORDER BY al.created_at DESC LIMIT $1',
+      [limit]
+    );
+    res.json({ entries: rows });
+  } catch (err) { res.json({ entries: [] }); }
+});
+
+//
 // query is scoped to req.session.userId, so what you see is only
 // ever your own list.
 // ------------------------------------------------------------
