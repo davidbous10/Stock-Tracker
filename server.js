@@ -519,6 +519,128 @@ app.get('/api/auth/2fa/status', requireAuth, async (req, res) => {
   }
 });
 
+// WebAuthn (Face ID / Touch ID) - Registration
+app.post('/api/auth/webauthn/register-options', requireAuth, async (req, res) => {
+  const crypto = require('crypto');
+  const challenge = crypto.randomBytes(32).toString('base64url');
+  req.session.webauthnChallenge = challenge;
+
+  res.json({
+    challenge,
+    rp: { name: 'Trade Track', id: new URL(req.protocol + '://' + req.get('host')).hostname },
+    user: {
+      id: Buffer.from(String(req.session.userId)).toString('base64url'),
+      name: req.session.userEmail,
+      displayName: req.session.userName || req.session.userEmail,
+    },
+    pubKeyCredParams: [
+      { alg: -7, type: 'public-key' },
+      { alg: -257, type: 'public-key' },
+    ],
+    authenticatorSelection: {
+      authenticatorAttachment: 'platform',
+      userVerification: 'required',
+    },
+    timeout: 60000,
+  });
+});
+
+app.post('/api/auth/webauthn/register', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  const { credentialId, publicKey } = req.body;
+  if (!credentialId || !publicKey) return res.status(400).json({ error: 'Missing credential data' });
+
+  try {
+    await pool.query(
+      'INSERT INTO webauthn_credentials (user_id, credential_id, public_key) VALUES ($1, $2, $3)',
+      [req.session.userId, credentialId, publicKey]
+    );
+    logActivity(req.session.userId, 'webauthn_registered');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not save credential' });
+  }
+});
+
+// WebAuthn login - get options for a given email
+app.post('/api/auth/webauthn/login-options', async (req, res) => {
+  if (!requireDb(res)) return;
+  const email = (req.body.email || '').trim().toLowerCase();
+  const crypto = require('crypto');
+
+  try {
+    const { rows: users } = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    if (users.length === 0) return res.status(400).json({ error: 'No account found' });
+
+    const { rows: creds } = await pool.query(
+      'SELECT credential_id FROM webauthn_credentials WHERE user_id = $1',
+      [users[0].id]
+    );
+    if (creds.length === 0) return res.status(400).json({ error: 'No biometric credentials registered' });
+
+    const challenge = crypto.randomBytes(32).toString('base64url');
+    req.session.webauthnChallenge = challenge;
+    req.session.webauthnUserId = users[0].id;
+
+    res.json({
+      challenge,
+      rpId: new URL(req.protocol + '://' + req.get('host')).hostname,
+      allowCredentials: creds.map(c => ({
+        id: c.credential_id,
+        type: 'public-key',
+        transports: ['internal'],
+      })),
+      userVerification: 'required',
+      timeout: 60000,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/auth/webauthn/login', async (req, res) => {
+  if (!requireDb(res)) return;
+  const { credentialId } = req.body;
+  const userId = req.session.webauthnUserId;
+  if (!userId || !credentialId) return res.status(400).json({ error: 'Invalid request' });
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT wc.user_id, u.email, u.name FROM webauthn_credentials wc JOIN users u ON wc.user_id = u.id WHERE wc.credential_id = $1 AND wc.user_id = $2',
+      [credentialId, userId]
+    );
+    if (rows.length === 0) return res.status(401).json({ error: 'Credential not recognized' });
+
+    req.session.userId = rows[0].user_id;
+    req.session.userEmail = rows[0].email;
+    req.session.userName = rows[0].name;
+    delete req.session.webauthnUserId;
+    delete req.session.webauthnChallenge;
+    logActivity(rows[0].user_id, 'login_biometric');
+    res.json({ email: rows[0].email, name: rows[0].name || null });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Check if user has biometric credentials
+app.get('/api/auth/webauthn/status', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  try {
+    const { rows } = await pool.query('SELECT COUNT(*) FROM webauthn_credentials WHERE user_id = $1', [req.session.userId]);
+    res.json({ registered: parseInt(rows[0].count, 10) > 0 });
+  } catch (err) { res.json({ registered: false }); }
+});
+
+app.post('/api/auth/webauthn/remove', requireAuth, async (req, res) => {
+  if (!requireDb(res)) return;
+  try {
+    await pool.query('DELETE FROM webauthn_credentials WHERE user_id = $1', [req.session.userId]);
+    logActivity(req.session.userId, 'webauthn_removed');
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: 'Could not remove' }); }
+});
+
 app.post('/api/auth/logout', (req, res) => {
   req.session.destroy(() => {
     res.clearCookie('connect.sid');
