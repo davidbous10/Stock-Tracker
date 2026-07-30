@@ -612,9 +612,21 @@
 
       <div class="settings-section">
         <h2>Security</h2>
-        <div class="section-desc">Protect your account with two-factor authentication</div>
-        <div id="twoFactorArea">
-          <div style="font-size:13px;color:var(--ink-muted)">Loading...</div>
+        <div class="section-desc">Protect your account</div>
+
+        <div class="settings-row" style="margin-bottom:16px">
+          <span class="label">Two-factor authentication</span>
+          <div id="twoFactorArea"><span style="font-size:12px;color:var(--ink-faint)">Loading...</span></div>
+        </div>
+
+        <div class="settings-row" style="margin-bottom:16px" id="faceIdRow">
+          <span class="label">Face ID / biometric login</span>
+          <div id="faceIdArea"><span style="font-size:12px;color:var(--ink-faint)">Loading...</span></div>
+        </div>
+
+        <div class="settings-row" style="border-top:1px solid var(--rule);padding-top:16px">
+          <span class="label">Sign out of your account</span>
+          <button class="btn-settings-submit" onclick="doMobileLogout()" style="background:transparent;color:var(--down);border:1px solid var(--down)">Log out</button>
         </div>
       </div>
 
@@ -995,6 +1007,102 @@
     }
 
     load2FA();
+    loadFaceId();
+
+    // Face ID / biometric
+    async function loadFaceId() {
+      var el = document.getElementById('faceIdArea');
+      var row = document.getElementById('faceIdRow');
+
+      // Check if WebAuthn is supported
+      if (!window.PublicKeyCredential) {
+        row.style.display = 'none';
+        return;
+      }
+
+      try {
+        var res = await AuthGuard.fetch('/api/auth/webauthn/status');
+        var data = await res.json();
+        if (data.registered) {
+          el.innerHTML = '<div style="display:flex;align-items:center;gap:12px"><span style="color:var(--up);font-weight:600;font-size:13px">Enabled</span><button class="btn-settings-submit" onclick="removeFaceId()" style="background:transparent;color:var(--ink-muted);border:1px solid var(--rule-strong)">Remove</button></div>';
+        } else {
+          el.innerHTML = '<button class="btn-settings-submit" onclick="setupFaceId()">Set up</button>';
+        }
+      } catch (err) {
+        el.innerHTML = '<span style="font-size:12px;color:var(--ink-faint)">Unavailable</span>';
+      }
+    }
+
+    async function setupFaceId() {
+      var el = document.getElementById('faceIdArea');
+      el.innerHTML = '<span style="font-size:12px;color:var(--ink-muted)">Setting up...</span>';
+      try {
+        var optRes = await AuthGuard.fetch('/api/auth/webauthn/register-options', { method: 'POST' });
+        var options = await optRes.json();
+
+        // Convert base64url strings to ArrayBuffers
+        options.challenge = base64urlToBuffer(options.challenge);
+        options.user.id = base64urlToBuffer(options.user.id);
+
+        var credential = await navigator.credentials.create({ publicKey: options });
+
+        // Send credential to server
+        var saveRes = await AuthGuard.fetch('/api/auth/webauthn/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            credentialId: bufferToBase64url(credential.rawId),
+            publicKey: bufferToBase64url(credential.response.getPublicKey ? credential.response.getPublicKey() : new Uint8Array(0)),
+          }),
+        });
+        var saveData = await saveRes.json();
+        if (saveRes.ok) {
+          loadFaceId();
+        } else {
+          el.innerHTML = '<span style="font-size:12px;color:var(--down)">' + (saveData.error || 'Setup failed') + '</span>';
+        }
+      } catch (err) {
+        if (err.name === 'NotAllowedError') {
+          el.innerHTML = '<span style="font-size:12px;color:var(--ink-faint)">Cancelled</span>';
+        } else {
+          el.innerHTML = '<span style="font-size:12px;color:var(--down)">Not supported on this device</span>';
+        }
+        setTimeout(loadFaceId, 2000);
+      }
+    }
+
+    async function removeFaceId() {
+      if (!confirm('Remove biometric login?')) return;
+      await AuthGuard.fetch('/api/auth/webauthn/remove', { method: 'POST' });
+      loadFaceId();
+    }
+
+    function base64urlToBuffer(str) {
+      str = str.replace(/-/g, '+').replace(/_/g, '/');
+      while (str.length % 4) str += '=';
+      var binary = atob(str);
+      var bytes = new Uint8Array(binary.length);
+      for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return bytes.buffer;
+    }
+
+    function bufferToBase64url(buf) {
+      var bytes = new Uint8Array(buf);
+      var binary = '';
+      for (var i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+      return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    // Mobile logout
+    window.doMobileLogout = async function() {
+      try {
+        await AuthGuard.fetch('/api/auth/logout', { method: 'POST' });
+        sessionStorage.clear();
+        window.location.href = '/';
+      } catch (err) {
+        window.location.href = '/';
+      }
+    };
 
     // Push notification management
     checkPushStatus();
