@@ -128,6 +128,8 @@ const AuthGuard = (function () {
     tabLogin.addEventListener('click', () => setAuthMode('login'));
     tabSignup.addEventListener('click', () => setAuthMode('signup'));
 
+    var pending2FA = null; // stores email/password while waiting for 2FA code
+
     authForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       authMsg.textContent = '';
@@ -141,6 +143,13 @@ const AuthGuard = (function () {
         payload.name = authName.value.trim();
       }
 
+      // If we're in 2FA mode, add the TOTP code
+      if (pending2FA) {
+        payload.email = pending2FA.email;
+        payload.password = pending2FA.password;
+        payload.totpCode = authPassword.value; // password field reused for 2FA code
+      }
+
       try {
         const res = await fetch(endpoint, {
           method: 'POST',
@@ -152,9 +161,29 @@ const AuthGuard = (function () {
         if (!res.ok) {
           authMsg.textContent = data.error;
           authSubmit.disabled = false;
+          if (pending2FA) authPassword.value = '';
           return;
         }
 
+        // Check if 2FA is required
+        if (data.requires2FA) {
+          pending2FA = { email: authEmail.value, password: authPassword.value };
+          authEmail.style.display = 'none';
+          authPassword.value = '';
+          authPassword.type = 'text';
+          authPassword.placeholder = '6-digit code from your authenticator';
+          authPassword.setAttribute('inputmode', 'numeric');
+          authPassword.setAttribute('autocomplete', 'one-time-code');
+          authPassword.maxLength = 6;
+          authHint.innerHTML = 'Enter the code from your authenticator app';
+          authSubmit.textContent = 'Verify';
+          authSubmit.disabled = false;
+          authPassword.focus();
+          return;
+        }
+
+        // Reset 2FA state
+        pending2FA = null;
         showApp(data.email, data.name || null);
       } catch (err) {
         authMsg.textContent = 'Could not reach the server';
