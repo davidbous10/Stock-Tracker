@@ -448,27 +448,29 @@ app.post('/api/auth/login', async (req, res) => {
 
     // Check 2FA if enabled - but skip on trusted devices
     if (rows[0].totp_enabled && rows[0].totp_secret) {
-      const trustedCookie = req.cookies && req.cookies.tt_trusted;
-      const isTrusted = trustedCookie === String(rows[0].id);
+      const deviceToken = req.body.deviceToken || '';
+      // Check if this device is trusted (token matches user id hash)
+      const crypto = require('crypto');
+      const expectedToken = crypto.createHash('sha256').update('tt-' + rows[0].id + '-trusted').digest('hex').slice(0, 32);
+      const isTrusted = deviceToken === expectedToken;
 
       if (!isTrusted) {
         if (!totpCode) {
-          // New device, password correct, need 2FA code
           return res.json({ requires2FA: true });
         }
-        // Verify TOTP code
         const { authenticator } = require('otplib');
         const valid = authenticator.check(totpCode, rows[0].totp_secret);
         if (!valid) {
           return res.status(401).json({ error: 'Invalid authentication code' });
         }
-        // 2FA passed - trust this device for 30 days
-        res.cookie('tt_trusted', String(rows[0].id), {
-          maxAge: 30 * 24 * 60 * 60 * 1000,
-          httpOnly: true,
-          sameSite: 'lax',
-        });
       }
+
+      // Return device token so client stores it for future logins
+      req.session.userId = rows[0].id;
+      req.session.userEmail = email;
+      req.session.userName = rows[0].name || null;
+      logActivity(rows[0].id, 'login');
+      return res.json({ email, name: rows[0].name || null, deviceToken: expectedToken });
     }
 
     req.session.userId = rows[0].id;
