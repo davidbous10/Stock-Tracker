@@ -45,10 +45,11 @@ const AuthGuard = (function () {
     authHint.textContent = mode === 'signup' ? 'Password must be at least 8 characters' : '';
     authHint.innerHTML = mode === 'login' ? '<a href="/reset.html" style="color:var(--ink-faint,#9A9C8B);font-size:11px;text-decoration:none">Forgot password?</a>' : authHint.textContent;
 
-    // Show Face ID button on login mode if supported
+    // Show Face ID button on login mode if supported AND on mobile only
     var faceIdBtn = document.getElementById('faceIdLogin');
+    var isMobile = window.innerWidth <= 800;
     if (faceIdBtn) {
-      faceIdBtn.style.display = (mode === 'login' && window.PublicKeyCredential) ? 'block' : 'none';
+      faceIdBtn.style.display = (mode === 'login' && window.PublicKeyCredential && isMobile) ? 'block' : 'none';
     }
     authPassword.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
     authSubmit.dataset.mode = mode;
@@ -155,6 +156,12 @@ const AuthGuard = (function () {
         payload.name = authName.value.trim();
       }
 
+      // Include device token if we have one (skips 2FA on trusted devices)
+      var storedToken = localStorage.getItem('tt_device_token');
+      if (storedToken && mode === 'login') {
+        payload.deviceToken = storedToken;
+      }
+
       // If we're in 2FA mode, add the TOTP code
       if (pending2FA) {
         payload.email = pending2FA.email;
@@ -196,6 +203,10 @@ const AuthGuard = (function () {
 
         // Reset 2FA state
         pending2FA = null;
+        // Save device token for future logins (skips 2FA)
+        if (data.deviceToken) {
+          localStorage.setItem('tt_device_token', data.deviceToken);
+        }
         showApp(data.email, data.name || null);
       } catch (err) {
         authMsg.textContent = 'Could not reach the server';
@@ -203,8 +214,9 @@ const AuthGuard = (function () {
       }
     });
 
-    // Inject Face ID login button
-    if (window.PublicKeyCredential && authForm) {
+    // Inject Face ID login button (mobile only)
+    var isMobileDevice = window.innerWidth <= 800;
+    if (window.PublicKeyCredential && authForm && isMobileDevice) {
       var faceBtn = document.createElement('button');
       faceBtn.type = 'button';
       faceBtn.id = 'faceIdLogin';
