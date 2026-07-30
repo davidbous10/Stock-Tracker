@@ -1,87 +1,133 @@
 <!DOCTYPE html>
-<html lang="en" style="background:#0C111B">
+<html lang="en" style="background:#0F1A14">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Admin Portal | Trade Track</title>
-  <meta name="theme-color" content="#0C111B" />
+  <title>Admin | Trade Track</title>
+  <meta name="theme-color" content="#0F1A14" />
   <link rel="icon" href="/logo-192.png" type="image/png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Archivo:wght@400;500;600;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { min-height: 100vh; background: #0C111B; color: #C8D0E0; font-family: 'Archivo', system-ui, sans-serif; }
+    body { min-height: 100vh; background: #0F1A14; color: #D4DBCE; font-family: 'Archivo', system-ui, sans-serif; }
 
     .admin-login { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
-    .admin-login-card { width: 100%; max-width: 360px; background: #141B2D; border: 1px solid #2A3A5C; border-radius: 8px; padding: 36px; }
-    .admin-login-card h1 { font-size: 22px; margin-bottom: 6px; color: #F3EEDF; }
-    .admin-login-card p { font-size: 13px; color: #7A8599; margin-bottom: 20px; }
-    .admin-login-card input { width: 100%; padding: 12px 14px; background: #0C111B; border: 1px solid #2A3A5C; border-radius: 4px; color: #C8D0E0; font-size: 14px; font-family: 'Archivo', sans-serif; outline: none; margin-bottom: 12px; }
-    .admin-login-card input:focus { border-color: #5B9BD5; box-shadow: 0 0 0 3px rgba(91,155,213,0.15); }
-    .admin-login-card button { width: 100%; padding: 12px; background: #1A3A6B; color: #C8D0E0; border: none; border-radius: 4px; font-size: 13px; font-weight: 700; cursor: pointer; text-transform: uppercase; letter-spacing: 0.06em; }
-    .admin-login-card button:hover { background: #2A5AAB; }
-    .admin-login-card .msg { font-size: 12px; color: #FF6B6B; min-height: 16px; margin-bottom: 8px; }
+    .login-card {
+      width: 100%; max-width: 380px; background: #162219; border: 1px solid #2A3B2E;
+      border-radius: 8px; padding: 40px 36px; position: relative;
+    }
+    .login-card::before { content: ''; position: absolute; inset: 8px; border: 1px solid rgba(201,167,92,0.2); border-radius: 4px; pointer-events: none; }
+    .login-logo { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
+    .login-logo img { width: 40px; height: 40px; border-radius: 8px; }
+    .login-logo-text { font-family: 'Marcellus', Georgia, serif; font-size: 20px; color: #F3EEDF; }
+    .login-sub { font-size: 10px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #C9A75C; }
+    .login-card input {
+      width: 100%; padding: 12px 14px; background: #0F1A14; border: 1px solid #2A3B2E;
+      border-radius: 4px; color: #D4DBCE; font-size: 14px; font-family: 'Archivo', sans-serif; outline: none; margin-bottom: 14px;
+    }
+    .login-card input:focus { border-color: #C9A75C; box-shadow: 0 0 0 3px rgba(201,167,92,0.12); }
+    .login-card button {
+      width: 100%; padding: 12px; background: #1B5E3A; color: #F3EEDF; border: none;
+      border-radius: 4px; font-size: 13px; font-weight: 700; cursor: pointer;
+      text-transform: uppercase; letter-spacing: 0.06em; font-family: 'Archivo', sans-serif;
+    }
+    .login-card button:hover { background: #24784A; }
+    .login-msg { font-size: 12px; color: #FF6B6B; min-height: 16px; margin-bottom: 10px; }
 
-    .admin-dash { display: none; padding: 24px; max-width: 1100px; margin: 0 auto; }
-    .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-    .admin-header h1 { font-size: 24px; color: #F3EEDF; }
-    .admin-logout { background: none; border: 1px solid #2A3A5C; color: #7A8599; padding: 8px 16px; border-radius: 4px; font-size: 12px; cursor: pointer; font-family: 'Archivo', sans-serif; }
-    .admin-logout:hover { border-color: #FF6B6B; color: #FF6B6B; }
+    .dash { display: none; padding: 28px; max-width: 1100px; margin: 0 auto; }
+    .dash-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
+    .dash-title { font-family: 'Marcellus', Georgia, serif; font-size: 26px; color: #F3EEDF; }
+    .dash-sub { font-size: 12px; color: #5E6B56; margin-top: 4px; }
+    .btn-logout {
+      background: none; border: 1px solid #2A3B2E; color: #5E6B56;
+      padding: 8px 16px; border-radius: 4px; font-size: 12px; cursor: pointer; font-family: 'Archivo', sans-serif;
+    }
+    .btn-logout:hover { border-color: #FF6B6B; color: #FF6B6B; }
 
-    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 24px; }
-    .stat-card { background: #141B2D; border: 1px solid #2A3A5C; border-radius: 6px; padding: 18px; backdrop-filter: blur(12px); }
-    .stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #7A8599; margin-bottom: 6px; }
-    .stat-value { font-family: 'Courier Prime', monospace; font-size: 28px; font-weight: 700; color: #F3EEDF; }
-    .stat-sub { font-size: 11px; color: #5B9BD5; margin-top: 4px; }
+    .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 28px; }
+    .stat-card {
+      background: #162219; border: 1px solid #2A3B2E; border-radius: 6px; padding: 20px;
+    }
+    .stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #5E6B56; margin-bottom: 8px; }
+    .stat-num { font-family: 'Courier Prime', monospace; font-size: 32px; font-weight: 700; color: #C9A75C; }
 
-    .section-title { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #7A8599; margin-bottom: 12px; margin-top: 24px; }
+    .sec-title {
+      font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em;
+      color: #5E6B56; margin: 28px 0 12px; padding-bottom: 8px; border-bottom: 1px solid #2A3B2E;
+    }
 
-    .data-table { width: 100%; background: #141B2D; border: 1px solid #2A3A5C; border-radius: 6px; border-collapse: collapse; font-size: 12px; }
-    .data-table th { text-align: left; padding: 10px 14px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #7A8599; border-bottom: 1px solid #2A3A5C; background: #0C111B; }
-    .data-table td { padding: 10px 14px; border-bottom: 1px solid #1E2A42; color: #C8D0E0; }
-    .data-table tr:last-child td { border-bottom: none; }
-    .data-table .mono { font-family: 'Courier Prime', monospace; }
-    .data-table .faint { color: #7A8599; }
+    .tbl {
+      width: 100%; background: #162219; border: 1px solid #2A3B2E;
+      border-radius: 6px; border-collapse: collapse; font-size: 13px;
+    }
+    .tbl th {
+      text-align: left; padding: 10px 16px; font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.1em; color: #5E6B56;
+      border-bottom: 1px solid #2A3B2E; background: #0F1A14;
+    }
+    .tbl td { padding: 10px 16px; border-bottom: 1px solid #1B2B20; color: #D4DBCE; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl .mono { font-family: 'Courier Prime', monospace; }
+    .tbl .faint { color: #5E6B56; font-size: 11px; }
 
-    .log-entry { background: #141B2D; border: 1px solid #2A3A5C; border-radius: 4px; padding: 10px 14px; margin-bottom: 6px; font-size: 12px; display: flex; gap: 12px; }
-    .log-time { color: #7A8599; font-family: 'Courier Prime', monospace; font-size: 11px; white-space: nowrap; }
-    .log-action { color: #5B9BD5; font-weight: 600; min-width: 80px; }
-    .log-detail { color: #C8D0E0; flex: 1; }
+    .log-item {
+      display: flex; gap: 14px; padding: 10px 0; border-bottom: 1px solid #1B2B20;
+      font-size: 12px; align-items: flex-start;
+    }
+    .log-item:last-child { border-bottom: none; }
+    .log-time { color: #5E6B56; font-family: 'Courier Prime', monospace; font-size: 11px; white-space: nowrap; min-width: 120px; }
+    .log-action { color: #C9A75C; font-weight: 600; min-width: 90px; }
+    .log-detail { color: #8A9483; flex: 1; word-break: break-word; }
 
-    @media (max-width: 640px) { .stat-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 768px) { .stat-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 480px) { .stat-grid { grid-template-columns: 1fr; } .dash { padding: 16px; } }
   </style>
 </head>
 <body>
   <div class="admin-login" id="adminLogin">
-    <div class="admin-login-card">
-      <h1>Admin Portal</h1>
-      <p>Trade Track administrative dashboard</p>
-      <div class="msg" id="adminMsg"></div>
+    <div class="login-card">
+      <div class="login-logo">
+        <img src="/logo-192.png" alt="" />
+        <div>
+          <div class="login-sub">Admin portal</div>
+          <div class="login-logo-text">Trade Track</div>
+        </div>
+      </div>
+      <div class="login-msg" id="adminMsg"></div>
       <input type="password" id="adminPw" placeholder="Admin password" />
-      <button onclick="adminLogin()">Access Dashboard</button>
+      <button onclick="doLogin()">Access dashboard</button>
     </div>
   </div>
 
-  <div class="admin-dash" id="adminDash">
-    <div class="admin-header">
-      <h1>Trade Track Admin</h1>
-      <button class="admin-logout" onclick="adminLogout()">Log out</button>
+  <div class="dash" id="dash">
+    <div class="dash-header">
+      <div>
+        <div class="dash-title">Admin Dashboard</div>
+        <div class="dash-sub" id="lastRefresh"></div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">Log out</button>
     </div>
 
     <div class="stat-grid" id="statGrid"></div>
 
-    <div class="section-title">Users</div>
-    <div id="usersTable"></div>
+    <div class="sec-title">Users</div>
+    <div id="usersArea"></div>
 
-    <div class="section-title">Popular stocks</div>
-    <div id="stocksTable"></div>
+    <div class="sec-title">Most tracked stocks</div>
+    <div id="stocksArea"></div>
 
-    <div class="section-title">Recent activity</div>
-    <div id="activityLog"></div>
+    <div class="sec-title">Recent activity</div>
+    <div id="activityArea"></div>
   </div>
 
   <script>
-    async function adminLogin() {
+    var esc = function(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+    var fmtDate = function(d) { if (!d) return ''; return new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); };
+
+    document.getElementById('adminPw').addEventListener('keydown', function(e) { if (e.key === 'Enter') doLogin(); });
+
+    async function doLogin() {
       var pw = document.getElementById('adminPw').value;
       var msg = document.getElementById('adminMsg');
       try {
@@ -93,78 +139,86 @@
         var data = await res.json();
         if (res.ok) {
           document.getElementById('adminLogin').style.display = 'none';
-          document.getElementById('adminDash').style.display = 'block';
-          loadAdminData();
+          document.getElementById('dash').style.display = 'block';
+          loadAll();
         } else {
           msg.textContent = data.error || 'Invalid password';
         }
       } catch (err) { msg.textContent = 'Could not reach server'; }
     }
 
-    async function adminLogout() {
+    async function doLogout() {
       await fetch('/api/admin/logout', { method: 'POST' });
-      document.getElementById('adminDash').style.display = 'none';
+      document.getElementById('dash').style.display = 'none';
       document.getElementById('adminLogin').style.display = 'flex';
       document.getElementById('adminPw').value = '';
     }
 
-    document.getElementById('adminPw').addEventListener('keydown', function(e) { if (e.key === 'Enter') adminLogin(); });
-
-    async function loadAdminData() {
+    async function loadAll() {
+      document.getElementById('lastRefresh').textContent = 'Last refreshed: ' + new Date().toLocaleTimeString();
       try {
-        var [statsRes, usersRes, stocksRes, logRes] = await Promise.all([
+        var [statsRes, stocksRes, activityRes] = await Promise.all([
           fetch('/api/admin/stats'),
-          fetch('/api/admin/users'),
           fetch('/api/admin/popular-stocks'),
-          fetch('/api/admin/activity?limit=30'),
+          fetch('/api/admin/activity?limit=40'),
         ]);
         var stats = await statsRes.json();
-        var users = await usersRes.json();
         var stocks = await stocksRes.json();
-        var log = await logRes.json();
+        var activity = await activityRes.json();
 
-        // Stats
+        // Stats cards
         var grid = document.getElementById('statGrid');
         grid.innerHTML = [
-          { label: 'Total users', value: stats.users || 0, sub: 'registered accounts' },
-          { label: 'Unique tickers', value: stats.tickers || 0, sub: 'being tracked' },
-          { label: 'Active alerts', value: stats.alerts || 0, sub: 'monitoring prices' },
-          { label: 'Saved articles', value: stats.savedArticles || 0, sub: 'bookmarked' },
+          { label: 'Total users', val: stats.totalUsers || 0 },
+          { label: 'Stocks tracked', val: stats.totalTickers || 0 },
+          { label: 'Active alerts', val: stats.totalAlerts || 0 },
+          { label: 'Saved articles', val: stats.totalSavedArticles || 0 },
         ].map(function(s) {
-          return '<div class="stat-card"><div class="stat-label">' + s.label + '</div><div class="stat-value">' + s.value + '</div><div class="stat-sub">' + s.sub + '</div></div>';
+          return '<div class="stat-card"><div class="stat-label">' + s.label + '</div><div class="stat-num">' + s.val + '</div></div>';
         }).join('');
 
-        // Users table
-        var uTable = document.getElementById('usersTable');
-        var uRows = (users.users || []).map(function(u) {
-          return '<tr><td class="mono">' + u.id + '</td><td>' + esc(u.email) + '</td><td>' + esc(u.name || '') + '</td><td class="faint">' + fmtDate(u.created_at) + '</td></tr>';
-        }).join('');
-        uTable.innerHTML = '<table class="data-table"><tr><th>ID</th><th>Email</th><th>Name</th><th>Joined</th></tr>' + uRows + '</table>';
+        // Users table (from stats response)
+        var users = stats.users || [];
+        var usersEl = document.getElementById('usersArea');
+        if (users.length === 0) {
+          usersEl.innerHTML = '<div style="color:#5E6B56;font-size:13px">No users yet</div>';
+        } else {
+          usersEl.innerHTML = '<table class="tbl"><tr><th>ID</th><th>Email</th><th>Name</th><th>Joined</th></tr>' +
+            users.map(function(u) {
+              return '<tr><td class="mono">' + u.id + '</td><td>' + esc(u.email) + '</td><td>' + esc(u.name || '') + '</td><td class="faint">' + fmtDate(u.joinedAt) + '</td></tr>';
+            }).join('') + '</table>';
+        }
 
         // Popular stocks
-        var sTable = document.getElementById('stocksTable');
-        var sRows = (stocks.stocks || []).map(function(s) {
-          return '<tr><td class="mono">' + esc(s.ticker) + '</td><td>' + s.count + ' users</td></tr>';
-        }).join('');
-        sTable.innerHTML = '<table class="data-table"><tr><th>Ticker</th><th>Watchers</th></tr>' + sRows + '</table>';
+        var stocksList = stocks.stocks || [];
+        var stocksEl = document.getElementById('stocksArea');
+        if (stocksList.length === 0) {
+          stocksEl.innerHTML = '<div style="color:#5E6B56;font-size:13px">No data</div>';
+        } else {
+          stocksEl.innerHTML = '<table class="tbl"><tr><th>Ticker</th><th>Users watching</th></tr>' +
+            stocksList.map(function(s) {
+              return '<tr><td class="mono">' + esc(s.ticker) + '</td><td>' + s.count + '</td></tr>';
+            }).join('') + '</table>';
+        }
 
         // Activity log
-        var logEl = document.getElementById('activityLog');
-        logEl.innerHTML = (log.entries || []).map(function(e) {
-          return '<div class="log-entry"><span class="log-time">' + fmtDate(e.created_at) + '</span><span class="log-action">' + esc(e.action) + '</span><span class="log-detail">' + esc(e.detail || '') + '</span></div>';
-        }).join('');
+        var entries = activity.entries || [];
+        var actEl = document.getElementById('activityArea');
+        if (entries.length === 0) {
+          actEl.innerHTML = '<div style="color:#5E6B56;font-size:13px">No activity</div>';
+        } else {
+          actEl.innerHTML = entries.map(function(e) {
+            return '<div class="log-item"><span class="log-time">' + fmtDate(e.created_at) + '</span><span class="log-action">' + esc(e.action) + '</span><span class="log-detail">' + esc(e.detail || '') + ' <span style="color:#5E6B56">(' + esc(e.email || 'user ' + e.user_id) + ')</span></span></div>';
+          }).join('');
+        }
 
       } catch (err) {
-        document.getElementById('statGrid').innerHTML = '<div style="color:#FF6B6B">Failed to load admin data</div>';
+        document.getElementById('statGrid').innerHTML = '<div style="color:#FF6B6B;padding:20px">Failed to load data. Check server logs.</div>';
       }
     }
 
-    function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
-    function fmtDate(d) { return new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
-
-    // Auto-refresh every 30 seconds
     setInterval(function() {
-      if (document.getElementById('adminDash').style.display !== 'none') loadAdminData();
+      if (document.getElementById('dash').style.display !== 'none') loadAll();
     }, 30000);
   </script>
 </body>
