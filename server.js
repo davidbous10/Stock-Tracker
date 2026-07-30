@@ -348,7 +348,7 @@ async function getAllWatchlistItems(userId) {
 async function fetchCompanyProfile(ticker) {
   try {
     const url = `https://finnhub.io/api/v1/stock/profile2?symbol=${ticker}&token=${process.env.FINNHUB_API_KEY}`;
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url);
     const data = await response.json();
     return {
       name: data && data.name ? data.name : null,
@@ -1049,10 +1049,25 @@ app.post('/api/watchlist/reorder', requireAuth, async (req, res) => {
 // ------------------------------------------------------------
 const FINNHUB_QUOTE_URL = 'https://finnhub.io/api/v1/quote';
 
+// Helper: fetch with timeout (8 seconds default)
+async function fetchWithTimeout(url, timeoutMs) {
+  timeoutMs = timeoutMs || 8000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    return res;
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
+  }
+}
+
 async function fetchQuote(ticker) {
   try {
     const url = `${FINNHUB_QUOTE_URL}?symbol=${ticker}&token=${process.env.FINNHUB_API_KEY}`;
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url);
     const data = await response.json();
 
     if (!data || data.c === 0) {
@@ -2973,8 +2988,15 @@ initDb();
 setTimeout(runScheduledChecks, 8000);
 setInterval(runScheduledChecks, SNAPSHOT_INTERVAL_MS);
 
-// Keep-alive: ping own health endpoint every 10 minutes to prevent
-// Railway free tier from putting the server to sleep.
+// Keep-alive: ping every 4 minutes to prevent Railway from sleeping
 setInterval(() => {
   fetch(`http://localhost:${PORT}/api/health`).catch(() => {});
-}, 10 * 60 * 1000);
+}, 4 * 60 * 1000);
+
+// Prevent server crashes from unhandled errors
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err.message);
+});
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled rejection:', err);
+});
