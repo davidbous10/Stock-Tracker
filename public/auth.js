@@ -88,16 +88,22 @@ const AuthGuard = (function () {
       if (res.status === 401) {
         showLogin('Your session expired. Please log in again.');
       }
-      // Hide any reconnecting indicator on success
+      // Retry on server errors (502/503/504 = Railway cold start or deploy)
+      if ((res.status === 502 || res.status === 503 || res.status === 504) && retries < 4) {
+        showReconnecting();
+        await new Promise(r => setTimeout(r, (retries + 1) * 2000));
+        return authFetch(url, options, retries + 1);
+      }
       hideReconnecting();
       return res;
     } catch (err) {
-      // Network error - retry up to 3 times with backoff
-      if (retries < 3) {
+      // Network error - retry up to 4 times with exponential backoff
+      if (retries < 4) {
         showReconnecting();
-        await new Promise(r => setTimeout(r, (retries + 1) * 1500));
+        await new Promise(r => setTimeout(r, Math.min((retries + 1) * 2000, 8000)));
         return authFetch(url, options, retries + 1);
       }
+      hideReconnecting();
       throw err;
     }
   }
@@ -107,7 +113,7 @@ const AuthGuard = (function () {
     if (reconnectEl) return;
     reconnectEl = document.createElement('div');
     reconnectEl.id = 'reconnectBanner';
-    reconnectEl.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#C9A75C;color:#23281F;text-align:center;padding:6px;font-size:12px;font-weight:600;font-family:Archivo,system-ui,sans-serif;z-index:300';
+    reconnectEl.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#C9A75C;color:#23281F;text-align:center;padding:8px;font-size:12px;font-weight:600;font-family:Archivo,system-ui,sans-serif;z-index:300;backdrop-filter:blur(8px)';
     reconnectEl.textContent = 'Reconnecting to server...';
     document.body.appendChild(reconnectEl);
   }
@@ -230,22 +236,34 @@ const AuthGuard = (function () {
 
     // VERIFY in background — if the session actually expired on the
     // server, this catches it and bounces to login.
-    try {
-      const res = await fetch('/api/auth/me');
-      const data = await res.json();
-      if (res.ok) {
-        if (!usedCache) {
-          // First visit or sessionStorage was cleared — normal path
-          showApp(data.email, data.name || null);
-        } else {
-          // Update sidebar in case name/email changed
-          populateAccountInfo(data.email);
+    // Retry up to 3 times to handle Railway cold starts
+    var verified = false;
+    for (var attempt = 0; attempt < 3 && !verified; attempt++) {
+      try {
+        if (attempt > 0) {
+          showReconnecting();
+          await new Promise(r => setTimeout(r, attempt * 2000));
         }
-      } else {
-        showLogin();
+        const res = await fetch('/api/auth/me');
+        const data = await res.json();
+        hideReconnecting();
+        if (res.ok) {
+          verified = true;
+          if (!usedCache) {
+            showApp(data.email, data.name || null);
+          } else {
+            populateAccountInfo(data.email);
+          }
+        } else {
+          verified = true;
+          showLogin();
+        }
+      } catch (err) {
+        if (attempt === 2) {
+          hideReconnecting();
+          if (!usedCache) showLogin();
+        }
       }
-    } catch (err) {
-      if (!usedCache) showLogin();
     }
   }
 
