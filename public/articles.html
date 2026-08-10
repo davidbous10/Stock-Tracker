@@ -562,6 +562,19 @@
     }
     .refresh-btn:hover { border-color: var(--green); color: var(--ink); }
 
+    .art-tabs {
+      display: flex; gap: 0; margin: 14px 0 18px;
+      border-bottom: 2px solid var(--rule-strong);
+    }
+    .art-tab {
+      background: none; border: none; border-bottom: 2px solid transparent;
+      margin-bottom: -2px; padding: 10px 20px; font-size: 13px; font-weight: 600;
+      font-family: var(--font-ui); color: var(--ink-faint); cursor: pointer;
+      transition: color 0.2s ease, border-color 0.2s ease;
+    }
+    .art-tab:hover { color: var(--ink); }
+    .art-tab.active { color: var(--ink); border-bottom-color: var(--brass); }
+
     .skel-featured {
       background: var(--paper-raise);
       border: 1px solid var(--rule);
@@ -695,7 +708,7 @@
     </aside>
 
     <div class="main-content">
-      <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <div>
           <div class="page-title">Articles</div>
           <div class="page-subtitle" id="pageDate"></div>
@@ -703,11 +716,17 @@
         <button class="refresh-btn" id="refreshBtn">↻ Refresh</button>
       </div>
 
-      <div class="section-label">Market news</div>
-      <div id="marketNews">
-        <div class="skel-featured">
-          <div class="skeleton skel-line" style="width:30%"></div>
-          <div class="skeleton skel-line" style="width:80%;height:16px"></div>
+      <div class="art-tabs">
+        <button class="art-tab active" onclick="switchTab('market')">Market</button>
+        <button class="art-tab" onclick="switchTab('watchlist')">Your stocks</button>
+        <button class="art-tab" onclick="switchTab('saved')">Saved</button>
+      </div>
+
+      <div id="tabMarket">
+        <div id="marketNews">
+          <div class="skel-featured">
+            <div class="skeleton skel-line" style="width:30%"></div>
+            <div class="skeleton skel-line" style="width:80%;height:16px"></div>
           <div class="skeleton skel-line" style="width:65%"></div>
         </div>
         <div class="news-grid">
@@ -717,8 +736,9 @@
           <div class="skel-news-card"><div class="skeleton skel-line" style="width:40%"></div><div class="skeleton skel-line" style="width:90%"></div><div class="skeleton skel-line" style="width:70%"></div></div>
         </div>
       </div>
+      </div>
 
-      <div class="section-label">From your watchlist</div>
+      <div id="tabWatchlist" style="display:none">
       <div id="watchlistNews">
         <div class="skel-featured" style="height:110px">
           <div class="skeleton skel-line" style="width:20%"></div>
@@ -726,10 +746,12 @@
           <div class="skeleton skel-line" style="width:60%"></div>
         </div>
       </div>
+      </div>
 
-      <div class="section-label">Saved</div>
+      <div id="tabSaved" style="display:none">
       <div id="savedArticles">
         <div class="feed-empty">Loading saved articles…</div>
+      </div>
       </div>
     </div>
   </div>
@@ -738,6 +760,18 @@
   <script src="/chat.js"></script>
   <script>
     AuthGuard.init(initArticlesPage);
+
+    function switchTab(tab) {
+      document.querySelectorAll('.art-tab').forEach(function(t) { t.classList.remove('active'); });
+      document.querySelectorAll('[id^="tab"]').forEach(function(p) {
+        if (p.id === 'tab' + tab.charAt(0).toUpperCase() + tab.slice(1)) {
+          p.style.display = '';
+        } else if (['tabMarket','tabWatchlist','tabSaved'].includes(p.id)) {
+          p.style.display = 'none';
+        }
+      });
+      event.target.classList.add('active');
+    }
 
     function esc(str) {
       const div = document.createElement('div');
